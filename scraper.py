@@ -2,14 +2,19 @@ import sys
 import urllib3
 import certifi
 import re
+import csv
+import os
 
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
 IDs = {}
 _ndivs = 0
+
 baseUrl = sys.argv[1]
 pages = sys.argv[2]
+filename = sys.argv[3]
+
 site = "https://" + baseUrl.split('//')[1].split('/')[0]
 http = urllib3.PoolManager( 10,
     cert_reqs='CERT_REQUIRED',
@@ -30,7 +35,7 @@ def simpleRequest(url):
     response = http.request('GET', url)
     return response.data
 
-def fetchSellersList(itemID):
+def fetchSellersList(itemID, writer):
     global _ndivs
     checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
     _htmlContent = simpleRequest(checkUrl)
@@ -53,13 +58,17 @@ def fetchSellersList(itemID):
                 justLaunched = extractSellerInfo(sellerLink)
                 if justLaunched:
                     # next line prints title of the object to sell
-                    sbar.write("[+] -- {}".format(title))
+                    # sbar.write("[+] -- {}".format(title))
                     # next line prints the seller name
-                    sbar.write(str(name))
+                    # sbar.write(str(name))
                     # next line prints the link to the seller page
-                    sbar.write(site + sellerLink)
+                    # sbar.write(site + sellerLink)
                     # next line prints " seller name :: just launched"
                     sbar.write(" -- " + name + " :: " + justLaunched.text.strip())
+                    writer.writerow({
+                        'seller_name': str(name),
+                        'seller_link': site + sellerLink
+                        })
             sbar.update(1)
 
 def idsExtractor(soup, pbar):
@@ -77,19 +86,27 @@ def idsExtractor(soup, pbar):
 
 it = 1
 pos = 0
-with tqdm(total=int(pages), desc="Iteraing over pages") as pbar:
-    for i in range(int(pages)):
-        htmlContent = simpleRequest(baseUrl)
-        soup = BeautifulSoup(htmlContent, 'lxml')
-        IDs = idsExtractor(soup, pbar)
-        for key in IDs:
-            fetchSellersList(key)
-        pageLink = soup.find_all('span', attrs = {'class': 'pagnLink'})
-        if it > 1:
-            pos = 1
-        ll = list(pageLink)[pos].find('a')['href']
-        baseUrl = site + ll
-        print(baseUrl)
-        it += 1
-        pbar.udpate(1)
-pbar.close()
+mode = "w"
+
+if os.path.exists(filename):
+    mode = "a"
+with open(filename, mode=mode) as csv_file:
+    fieldnames = ['seller_name', 'seller_link']
+    writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+    if mode == "w":
+        writer.writeheader()
+    with tqdm(total=int(pages), desc="Iteraing over pages") as pbar:
+        for i in range(int(pages)):
+            htmlContent = simpleRequest(baseUrl)
+            soup = BeautifulSoup(htmlContent, 'lxml')
+            IDs = idsExtractor(soup, pbar)
+            for key in IDs:
+                fetchSellersList(key, writer)
+                pageLink = soup.find_all('span', attrs = {'class': 'pagnLink'})
+                if it > 1:
+                    pos = 1
+                    ll = list(pageLink)[pos].find('a')['href']
+                    baseUrl = site + ll
+                    it += 1
+                    pbar.udpate(1)
+                    pbar.close()
