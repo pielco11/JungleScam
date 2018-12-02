@@ -1,2 +1,3 @@
 certifi
 beautifulsoup4
+lxml
