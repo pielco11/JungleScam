@@ -17,7 +17,7 @@ print (Fore.YELLOW + """
 """)
 print (Fore.CYAN + 'An Amazon OSINT scraper for potential scam accounts')
 print (Fore.YELLOW + 'By @jakecreps & @noneprivacy')
-print (Fore.CYAN + 'Insert your URL')
+print (Fore.CYAN + 'Insert the URL for your search results')
 url = input()
 print ('How many pages do you want to scan?')
 pages = input()
