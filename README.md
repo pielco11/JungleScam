@@ -7,3 +7,5 @@ fullurl is the url of search result
 3 is the number of pages to search for
 
 file.csv output file
+
+2018 - All rights reserved - Francesco Poldi
