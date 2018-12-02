@@ -79,8 +79,8 @@ def fetchSellersList(itemID, writer):
         for div in divs:
             _name = div.find('h3', attrs = {'class': 'olpSellerName'})
             name = _name.text.strip()
-            price = div.find('span', attrs = {'class': 'olpOfferPrice'}).text.strip()
-            condition = str(div.find('span', attrs = {'class': 'olpCondition'}).text.strip()).replace("\n", "")
+            #price = div.find('span', attrs = {'class': 'olpOfferPrice'}).text.strip()
+            #condition = str(div.find('span', attrs = {'class': 'olpCondition'}).text.strip()).replace("\n", "")
             if name:
                 sellerLink = _name.find('a')['href']
                 justLaunched = extractSellerInfo(sellerLink)
