@@ -15,7 +15,7 @@ print (Fore.YELLOW + """
  .d88P"                    Y8b d88P
 888P"                       "Y88P"
 """)
-print (Fore.CYAN + 'An Amazon OSINT scanners for potential scam accounts')
+print (Fore.CYAN + 'An Amazon OSINT scraper for potential scam accounts')
 print (Fore.YELLOW + 'By @jakecreps & @noneprivacy')
 print (Fore.CYAN + 'Insert your URL')
 url = input()
