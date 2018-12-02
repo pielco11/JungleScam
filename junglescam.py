@@ -133,8 +133,8 @@ with open(filename, mode=mode) as csv_file:
                 pageLink = soup.find_all('span', attrs = {'class': 'pagnLink'})
                 if it > 1:
                     pos = 1
-                    ll = list(pageLink)[pos].find('a')['href']
-                    baseUrl = site + ll
-                    it += 1
-                    pbar.udpate(1)
-                    pbar.close()
+                ll = list(pageLink)[pos].find('a')['href']
+                baseUrl = site + ll
+                it += 1
+            pbar.udpate(1)
+        pbar.close()
