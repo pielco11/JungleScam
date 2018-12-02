@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 # setup colored output
 from colorama import init
-init()
+init(autoreset=True)
 from colorama import Fore, Back, Style
 
 IDs = {}
@@ -37,9 +37,9 @@ print (Fore.CYAN + 'An Amazon OSINT scraper for potential scam accounts')
 print (Fore.YELLOW + 'By @jakecreps & @noneprivacy')
 print (Fore.CYAN + 'Insert your URL')
 baseUrl = input()
-print ('How many pages do you want to scan?')
+print (Fore.CYAN + 'How many pages do you want to scan?')
 pages = input()
-print ('What do you want to call the csv?')
+print (Fore.CYAN + 'What do you want to call the csv?')
 filename = input()
 
 
