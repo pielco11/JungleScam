@@ -136,5 +136,5 @@ with open(filename, mode=mode) as csv_file:
                 ll = list(pageLink)[pos].find('a')['href']
                 baseUrl = site + ll
                 it += 1
-            pbar.udpate(1)
+            pbar.update(1)
         pbar.close()
