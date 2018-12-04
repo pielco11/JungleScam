@@ -4,9 +4,13 @@ import certifi
 import re
 import csv
 import os
+import random
+from json import loads
 
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+import asyncio
+import aiohttp
 
 # setup colored output
 from colorama import init
@@ -42,66 +46,83 @@ pages = input()
 print (Fore.CYAN + 'What do you want to call the csv?')
 filename = input()
 
+parallel = pages
+_fast_check = {}
 
-site = "https://" + baseUrl.split('//')[1].split('/')[0]
+def pageRequest(url):
+    response = http.request('GET', url)
+    return response.data
+
+def randomUserAgent():
+    _httpPool = urllib3.PoolManager( 10,
+        cert_reqs='CERT_REQUIRED',
+        ca_certs=certifi.where())
+    url = "https://fake-useragent.herokuapp.com/browsers/0.1.8"
+    r = _httpPool.request('GET', url).data.decode('utf-8')
+    browsers = loads(r)['browsers']
+    return random.choice(browsers[random.choice(list(browsers))])
+
 http = urllib3.PoolManager( 10,
     cert_reqs='CERT_REQUIRED',
     ca_certs=certifi.where(),
-    headers={'user-agent': 'Mozilla/5.0 (Windows NT 6.3; WOW64; rv:63.0) Gecko/20100101 Firefox/63.0'})
+    headers={'user-agent': randomUserAgent()})
 
-def extractSellerInfo(link):
+async def extractSellerInfo(link):
     url = site + link
-    _htmlContent = simpleRequest(url)
+    _htmlContent = pageRequest(url)
     _soup = BeautifulSoup(_htmlContent, 'lxml')
     JL_bool = _soup.find('span', id='feedback-no-rating')
     if not JL_bool:
         JL_bool = ""
     return JL_bool
 
+async def asyncRequest(url, randomUserAgent):
+    timeout = aiohttp.ClientTimeout(total=60*3)
+    ua = {'user-agent': randomUserAgent}
+    async with aiohttp.ClientSession(headers=ua) as session:
+        async with await session.get(url, timeout=timeout) as response:
+            return await response.read()
 
-def simpleRequest(url):
-    response = http.request('GET', url)
-    return response.data
-
-def fetchSellersList(itemID, writer):
+async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
     global _ndivs
+    global _total_sellers
+    global _checked_sellers
     checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
-    _htmlContent = simpleRequest(checkUrl)
+    _htmlContent = await asyncRequest(checkUrl, randomUserAgent)
     _soup = BeautifulSoup(_htmlContent, 'lxml')
     divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
     try:
         title = _soup.find('title').text.strip().strip("Amazon.com: Buying Choices: ")
     except AttributeError:
         title = str(_soup.find('title'))
-    __ndivs = _ndivs
-    _ndivs += len(divs)
-    with tqdm(total=_ndivs, initial=_ndivs - len(divs), desc="Iteraing over sellers") as sbar:
-        for div in divs:
-            _name = div.find('h3', attrs = {'class': 'olpSellerName'})
-            name = _name.text.strip()
-            #price = div.find('span', attrs = {'class': 'olpOfferPrice'}).text.strip()
-            #condition = str(div.find('span', attrs = {'class': 'olpCondition'}).text.strip()).replace("\n", "")
-            if name:
-                sellerLink = _name.find('a')['href']
-                justLaunched = extractSellerInfo(sellerLink)
-                if justLaunched:
-                    # next line prints title of the object to sell
-                    # sbar.write("[+] -- {}".format(title))
-                    # next line prints the seller name
-                    # sbar.write(str(name))
-                    # next line prints the link to the seller page
-                    # sbar.write(site + sellerLink)
-                    # next line prints " seller name :: just launched"
-                    sbar.write(" -- " + name + " :: " + justLaunched.text.strip())
-                    writer.writerow({
-                        'seller_name': str(name),
-                        'seller_link': site + sellerLink
-                        })
-            sbar.update(1)
+    _checked_sellers = _total_sellers
+    _total_sellers += len(divs)
+    for div in divs:
+        _name = div.find('h3', attrs = {'class': 'olpSellerName'})
+        name = _name.text.strip()
+        #price = div.find('span', attrs = {'class': 'olpOfferPrice'}).text.strip()
+        #condition = str(div.find('span', attrs = {'class': 'olpCondition'}).text.strip()).replace("\n", "")
+        if name:
+            sellerLink = _name.find('a')['href']
+            justLaunched = await extractSellerInfo(sellerLink)
+            if justLaunched:
+                # next line prints title of the object to sell
+                # sbar.write("[+] -- {}".format(title))
+                # next line prints the seller name
+                # sbar.write(str(name))
+                # next line prints the link to the seller page
+                # sbar.write(site + sellerLink)
+                # next line prints " seller name :: just launched"
+                sbar.write(" -- " + name + " :: " + justLaunched.text.strip())
+                writer.writerow({
+                    'seller_name': str(name),
+                    'seller_link': site + sellerLink
+                    })
+        sbar.update(1)
 
-def idsExtractor(soup, pbar):
-    _fast_check = {}
-    pbar.write("[<<<] Extracting IDs")
+def idsExtractor(soup, pbar, i):
+    global _fast_check
+    pbar.write("[<] Extracting IDs from page: {}".format(i+1))
     for link in soup.find_all('a', href=re.compile('www.amazon.com/[\w-]{1,100}/dp/[\w]{2,20}/ref=sr_1_[\d]{1,3}')):
         l = link.get('href')
         _l = l.split('/')
@@ -109,32 +130,51 @@ def idsExtractor(soup, pbar):
             a = _fast_check[_l[5]]
         except KeyError:
             _fast_check.update({_l[5]: l})
-    pbar.write("[>>>] IDs extracted = {}".format(len(_fast_check)))
     return _fast_check
 
-it = 1
-pos = 0
+site = "https://" + baseUrl.split('//')[1].split('/')[0]
+
 mode = "w"
+tasks = []
+loop = asyncio.get_event_loop()
 
 if os.path.exists(filename):
     mode = "a"
 with open(filename, mode=mode) as csv_file:
     fieldnames = ['seller_name', 'seller_link']
+    global writer
     writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
     if mode == "w":
         writer.writeheader()
-    with tqdm(total=int(pages), desc="Iteraing over pages") as pbar:
-        for i in range(int(pages)):
-            htmlContent = simpleRequest(baseUrl)
-            soup = BeautifulSoup(htmlContent, 'lxml')
-            IDs = idsExtractor(soup, pbar)
-            for key in IDs:
-                fetchSellersList(key, writer)
+    with tqdm(total=int(pages), initial=1, desc="Iteraing over pages") as pbar:
+        global _total_sellers
+        global _checked_sellers
+        _total_sellers = 0
+        _checked_sellers = 0
+        with tqdm(total=_total_sellers, initial=_checked_sellers, desc="Iteraing over sellers") as sbar:
+            global it
+            global pos
+            it = 1
+            pos = 0
+            loop = asyncio.get_event_loop()
+            for i in range(int(pages)):
+                randomUA = randomUserAgent()
+                htmlContent = pageRequest(baseUrl)
+                soup = BeautifulSoup(htmlContent, 'lxml')
+                IDs = idsExtractor(soup, pbar, i)
+                if not len(IDs):
+                    pbar.write("[x] Amazon is blocking your requests, please change IP")
+                    exit()
+                for key in IDs:
+                    task = asyncio.ensure_future(fetchSellersList(key, writer, i, randomUA, sbar))
+                    tasks.append(task)
                 pageLink = soup.find_all('span', attrs = {'class': 'pagnLink'})
                 if it > 1:
-                    pos = 1
+                     pos = 1
                 ll = list(pageLink)[pos].find('a')['href']
                 baseUrl = site + ll
                 it += 1
-            pbar.update(1)
-        pbar.close()
+                pbar.update(1)
+            pbar.close()
+            loop.run_until_complete(asyncio.wait(tasks))
+            loop.close()
