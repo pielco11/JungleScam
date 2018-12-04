@@ -17,13 +17,6 @@ from colorama import init
 init(autoreset=True)
 from colorama import Fore, Back, Style
 
-IDs = {}
-_ndivs = 0
-
-#baseUrl = sys.argv[1]
-#pages = sys.argv[2]
-#filename = sys.argv[3]
-
 print (Fore.YELLOW + """
 888888                            888           .d8888b.
     "88b                            888          d88P  Y88b
@@ -46,12 +39,8 @@ pages = input()
 print (Fore.CYAN + 'What do you want to call the csv?')
 filename = input()
 
-parallel = pages
-_fast_check = {}
-
-def pageRequest(url):
-    response = http.request('GET', url)
-    return response.data
+_products_id = {}
+_sellers_id = {}
 
 def randomUserAgent():
     _httpPool = urllib3.PoolManager( 10,
@@ -67,14 +56,41 @@ http = urllib3.PoolManager( 10,
     ca_certs=certifi.where(),
     headers={'user-agent': randomUserAgent()})
 
+def productIdsExtractor(soup, pbar, i):
+    global _products_id
+    pbar.write("[<] Extracting IDs from page {}".format(i+1))
+    for link in soup.find_all('a', href=re.compile('www.amazon.com/[\w-]{1,100}/dp/[\w]{2,20}/ref=sr_1_[\d]{1,3}')):
+        l = link.get('href')
+        _l = l.split('/')
+        try:
+            a = _products_id[_l[5]]
+        except KeyError:
+            _products_id.update({_l[5]: l})
+    return _products_id
+
+def sellerIdExtractor(soup):
+    _partial_link = soup.find('a', attrs = {'class': 'a-link-normal'}).text.strip()
+    _seller_id = _partial_link.split('/')[2].split('?')[0]
+    return _seller_id
+
+def pageRequest(url):
+    response = http.request('GET', url)
+    return response.data
+
 async def extractSellerInfo(link):
     url = site + link
     _htmlContent = pageRequest(url)
     _soup = BeautifulSoup(_htmlContent, 'lxml')
     JL_bool = _soup.find('span', id='feedback-no-rating')
+    sellerID = sellerIdExtractor(_soup)
+    try:
+        _sID = _sellers_id[sellerID]
+        return "",""
+    except KeyError:
+        _sellers_id[sellerID] = True
     if not JL_bool:
-        JL_bool = ""
-    return JL_bool
+        return "",""
+    return JL_bool,sellerID
 
 async def asyncRequest(url, randomUserAgent):
     timeout = aiohttp.ClientTimeout(total=60*3)
@@ -84,7 +100,6 @@ async def asyncRequest(url, randomUserAgent):
             return await response.read()
 
 async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
-    global _ndivs
     global _total_sellers
     global _checked_sellers
     checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
@@ -104,8 +119,8 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
         #condition = str(div.find('span', attrs = {'class': 'olpCondition'}).text.strip()).replace("\n", "")
         if name:
             sellerLink = _name.find('a')['href']
-            justLaunched = await extractSellerInfo(sellerLink)
-            if justLaunched:
+            justLaunched[0] = await extractSellerInfo(sellerLink)
+            if justLaunched[0]:
                 # next line prints title of the object to sell
                 # sbar.write("[+] -- {}".format(title))
                 # next line prints the seller name
@@ -113,24 +128,14 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
                 # next line prints the link to the seller page
                 # sbar.write(site + sellerLink)
                 # next line prints " seller name :: just launched"
-                sbar.write(" -- " + name + " :: " + justLaunched.text.strip())
+                sbar.write(" -- " + name + " :: " + justLaunched[0].text.strip()
+                    + " :: " + justLaunched[1])
                 writer.writerow({
                     'seller_name': str(name),
-                    'seller_link': site + sellerLink
+                    'seller_link': site + sellerLink,
+                    'seller_id': justLaunched[1]
                     })
         sbar.update(1)
-
-def idsExtractor(soup, pbar, i):
-    global _fast_check
-    pbar.write("[<] Extracting IDs from page: {}".format(i+1))
-    for link in soup.find_all('a', href=re.compile('www.amazon.com/[\w-]{1,100}/dp/[\w]{2,20}/ref=sr_1_[\d]{1,3}')):
-        l = link.get('href')
-        _l = l.split('/')
-        try:
-            a = _fast_check[_l[5]]
-        except KeyError:
-            _fast_check.update({_l[5]: l})
-    return _fast_check
 
 site = "https://" + baseUrl.split('//')[1].split('/')[0]
 
@@ -141,12 +146,12 @@ loop = asyncio.get_event_loop()
 if os.path.exists(filename):
     mode = "a"
 with open(filename, mode=mode) as csv_file:
-    fieldnames = ['seller_name', 'seller_link']
+    fieldnames = ['seller_name', 'seller_link', 'seller_id']
     global writer
     writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
     if mode == "w":
         writer.writeheader()
-    with tqdm(total=int(pages), initial=1, desc="Iteraing over pages") as pbar:
+    with tqdm(total=int(pages), initial=0, desc="Iteraing over pages") as pbar:
         global _total_sellers
         global _checked_sellers
         _total_sellers = 0
@@ -161,7 +166,7 @@ with open(filename, mode=mode) as csv_file:
                 randomUA = randomUserAgent()
                 htmlContent = pageRequest(baseUrl)
                 soup = BeautifulSoup(htmlContent, 'lxml')
-                IDs = idsExtractor(soup, pbar, i)
+                IDs = productIdsExtractor(soup, pbar, i)
                 if not len(IDs):
                     pbar.write("[x] Amazon is blocking your requests, please change IP")
                     exit()
