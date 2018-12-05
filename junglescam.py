@@ -69,7 +69,7 @@ def productIdsExtractor(soup, pbar, i):
     return _products_id
 
 def sellerIdExtractor(soup):
-    _partial_link = soup.find('a', attrs = {'class': 'a-link-normal'}).text.strip()
+    _partial_link = soup.find('a', attrs = {'class': 'a-link-normal'})['href']
     _seller_id = _partial_link.split('/')[2].split('?')[0]
     return _seller_id
 
@@ -119,7 +119,7 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
         #condition = str(div.find('span', attrs = {'class': 'olpCondition'}).text.strip()).replace("\n", "")
         if name:
             sellerLink = _name.find('a')['href']
-            justLaunched[0] = await extractSellerInfo(sellerLink)
+            justLaunched = await extractSellerInfo(sellerLink)
             if justLaunched[0]:
                 # next line prints title of the object to sell
                 # sbar.write("[+] -- {}".format(title))
