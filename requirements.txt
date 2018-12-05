@@ -1,3 +1,5 @@
 certifi
 beautifulsoup4
 lxml
+asyncio
+aiohttp
