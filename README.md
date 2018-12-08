@@ -17,4 +17,4 @@ Where:
 
 Why 7? Because the search returns results in 7 pages.
 
-2018 - All rights reserved - Francesco Poldi
+2018 - All rights reserved - Francesco Poldi & Jake Creps
