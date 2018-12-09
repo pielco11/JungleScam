@@ -1,3 +1,4 @@
 certifi
 beautifulsoup4
 lxml
+pysocks

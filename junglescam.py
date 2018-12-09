@@ -5,8 +5,10 @@ import re
 import csv
 import os
 import random
+import time
 from json import loads
 
+from urllib3.contrib.socks import SOCKSProxyManager
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 import asyncio
@@ -37,10 +39,16 @@ baseUrl = input()
 print (Fore.CYAN + 'How many pages do you want to scan?')
 pages = input()
 print (Fore.CYAN + 'What do you want to call the csv?')
-filename = input()
+filename = input() + ".csv"
 
 _products_id = {}
 _sellers_id = {}
+
+itemScoreDict = {
+    "1": "Pass",
+    "2": "Warn",
+    "3": "Fail"
+}
 
 def randomUserAgent():
     _httpPool = urllib3.PoolManager( 10,
@@ -56,9 +64,28 @@ http = urllib3.PoolManager( 10,
     ca_certs=certifi.where(),
     headers={'user-agent': randomUserAgent()})
 
-def productIdsExtractor(soup, pbar, i):
+def pageRequest(url):
+    response = http.request('GET', url)
+    return response.data
+
+async def asyncRequest(url, randomUserAgent):
+    timeout = aiohttp.ClientTimeout(total=60*3)
+    ua = {'user-agent': randomUserAgent}
+    async with aiohttp.ClientSession(headers=ua) as session:
+        try:
+            async with await session.get(url, timeout=timeout) as response:
+                return await response.read()
+        except aiohttp.client_exceptions.ClientConnectorError:
+            print(Fore.RED + "\n[x] Error while fetching data from Amazon!")
+
+def reviewMetaCheck(itemID):
+    _url = 'https://reviewmeta.com/api/amazon/{}'.format(itemID)
+    _result = pageRequest(_url)
+    score = loads(_result.decode('utf-8'))['s_overall']
+    return score
+
+def productIdsExtractor(soup):
     global _products_id
-    pbar.write("[<] Extracting IDs from page {}".format(i+1))
     for link in soup.find_all('a', href=re.compile('www.amazon.com/[\w-]{1,100}/dp/[\w]{2,20}/ref=sr_1_[\d]{1,3}')):
         l = link.get('href')
         _l = l.split('/')
@@ -68,72 +95,130 @@ def productIdsExtractor(soup, pbar, i):
             _products_id.update({_l[5]: l})
     return _products_id
 
-def sellerIdExtractor(soup):
-    _partial_link = soup.find('a', attrs = {'class': 'a-link-normal'})['href']
-    _seller_id = _partial_link.split('/')[2].split('?')[0]
+def sellerIdExtractor(link):
+    _seller_id = link.split("seller=")[1]
     return _seller_id
 
-def pageRequest(url):
-    response = http.request('GET', url)
-    return response.data
+def sellerStarsExtractor(soup):
+    _out_of = soup.find_all('span', attrs = {'class': 'a-color-success'})
+    if _out_of:
+        try:
+            _feedback = list(_out_of)[len(_out_of) - 1].text
+        except:
+            print(Fore.RED + "\n[x] Error while getting feedback from seller" +
+                 ", please check manually the next result")
+            input()
+        return _feedback
+    return 0
 
-async def extractSellerInfo(link):
+def sellerDescExtractor(soup):
+    about = soup.find('span', id='about-seller-text')
+    if about:
+        _text = about.text
+        _whatToFind = ['contact', 'gmail', 'yahoo', 'paypal']
+        _about = ""
+        for w in _whatToFind:
+            if w in _text:
+                _about += w + ","
+        _about[:len(_about)-1]
+        return _about
+    return ""
+
+def sellerJustLaunched(soup):
+    JL_bool = soup.find('span', id='feedback-no-rating')
+    if JL_bool:
+        return "True"
+    return ""
+
+def sellerListingsFetcher(id):
+    _url = 'https://www.amazon.com/s?me={}'.format(id)
+    _proxy = SOCKSProxyManager('socks5://localhost:9050',
+        cert_reqs='CERT_REQUIRED',
+        ca_certs=certifi.where(),
+        headers={'user-agent': randomUserAgent()})
+    _response =  _proxy.request('GET', _url)
+    _htmlContent =  _response.data
+    _soup = BeautifulSoup(_htmlContent, 'lxml')
+    resultsCount = _soup.find('span', attrs = {'id': 's-result-count'})
+    if resultsCount:
+        _results = re.search(' [\d]{1,7} ', resultsCount.text).group(0).strip()
+        return _results
+    f = open(id+'.html', "w")
+    f.write(str(_response))
+    f.close()
+    return str(resultsCount)
+
+def extractSellerInfo(link):
     url = site + link
     _htmlContent = pageRequest(url)
     _soup = BeautifulSoup(_htmlContent, 'lxml')
-    JL_bool = _soup.find('span', id='feedback-no-rating')
-    sellerID = sellerIdExtractor(_soup)
+    JL_bool = sellerJustLaunched(_soup)
+    sellerID = sellerIdExtractor(link)
+    sellerFull = {
+        'id': sellerID,
+        'feedback': '',
+        'desc': '',
+        'listings': '',
+        'just-launched': JL_bool
+    }
     try:
         _sID = _sellers_id[sellerID]
-        return "",""
+        return {}
     except KeyError:
         _sellers_id[sellerID] = True
-    if not JL_bool:
-        return "",""
-    return JL_bool,sellerID
-
-async def asyncRequest(url, randomUserAgent):
-    timeout = aiohttp.ClientTimeout(total=60*3)
-    ua = {'user-agent': randomUserAgent}
-    async with aiohttp.ClientSession(headers=ua) as session:
-        async with await session.get(url, timeout=timeout) as response:
-            return await response.read()
+        if not JL_bool:
+            sellerFull['feedback'] = sellerStarsExtractor(_soup)
+            if int(sellerFull['feedback']) > 75:
+                return {}
+        sellerFull['desc'] = sellerDescExtractor(_soup)
+        sellerFull['listings'] = sellerListingsFetcher(sellerID)
+        return sellerFull
 
 async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
-    global _total_sellers
-    global _checked_sellers
     checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
-    _htmlContent = await asyncRequest(checkUrl, randomUserAgent)
+    time.sleep(1)
+    _htmlContent = pageRequest(checkUrl)
     _soup = BeautifulSoup(_htmlContent, 'lxml')
     divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
     try:
         title = _soup.find('title').text.strip().strip("Amazon.com: Buying Choices: ")
     except AttributeError:
         title = str(_soup.find('title'))
-    _checked_sellers = _total_sellers
-    _total_sellers += len(divs)
+    itemScore = reviewMetaCheck(itemID)
+    itemLink = ""
+    try:
+        itemLink = f"https://www.amazon.com/dp/{itemID}/"
+        if int(itemScore) == 3:
+            itemScore = itemScoreDict[itemScore]
+            sbar.write("[+] item ID: " + itemID +
+                        "\n -- RM score: " + itemScore +
+                        "\n -- Link: " + itemLink)
+    except ValueError:
+        pass
+        #itemScore = "none"
+        #sbar.write("[+] item ID: " + itemID +
+        #            "\n -- RM score: " + itemScore +
+        #            "\n -- Link: " + itemLink)
     for div in divs:
         _name = div.find('h3', attrs = {'class': 'olpSellerName'})
         name = _name.text.strip()
-        #price = div.find('span', attrs = {'class': 'olpOfferPrice'}).text.strip()
-        #condition = str(div.find('span', attrs = {'class': 'olpCondition'}).text.strip()).replace("\n", "")
         if name:
             sellerLink = _name.find('a')['href']
-            justLaunched = await extractSellerInfo(sellerLink)
-            if justLaunched[0]:
-                # next line prints title of the object to sell
-                # sbar.write("[+] -- {}".format(title))
-                # next line prints the seller name
-                # sbar.write(str(name))
-                # next line prints the link to the seller page
-                # sbar.write(site + sellerLink)
-                # next line prints " seller name :: just launched"
-                sbar.write(" -- " + name + " :: " + justLaunched[0].text.strip()
-                    + " :: " + justLaunched[1])
+            sellerFull = extractSellerInfo(sellerLink)
+            if sellerFull:
+                sbar.write("<-> " + name + "\n |-> id: " + sellerFull['id']
+                    + "\n |-> just-launched: " + sellerFull['just-launched']
+                    + "\n |-> feedback: " + sellerFull['feedback']
+                    + "\n |-> desc: " + sellerFull['desc']
+                    + "\n --- listings: " + sellerFull['listings'])
                 writer.writerow({
-                    'seller_name': str(name),
-                    'seller_link': site + sellerLink,
-                    'seller_id': justLaunched[1]
+                    'id': sellerFull['id'],
+                    'name': str(name),
+                    'link': site + sellerLink,
+                    'just-launched': sellerFull['just-launched'],
+                    'feedback': sellerFull['feedback'],
+                    'listings': sellerFull['listings'],
+                    'desc': sellerFull['desc']
                     })
         sbar.update(1)
 
@@ -146,40 +231,37 @@ loop = asyncio.get_event_loop()
 if os.path.exists(filename):
     mode = "a"
 with open(filename, mode=mode) as csv_file:
-    fieldnames = ['seller_name', 'seller_link', 'seller_id']
+    fieldnames = ['id', 'name', 'link', 'just-launched', 'feedback', 'listings', 'desc']
     global writer
     writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
     if mode == "w":
         writer.writeheader()
-    with tqdm(total=int(pages), initial=0, desc="Iteraing over pages") as pbar:
-        global _total_sellers
-        global _checked_sellers
-        _total_sellers = 0
-        _checked_sellers = 0
-        with tqdm(total=_total_sellers, initial=_checked_sellers, desc="Iteraing over sellers") as sbar:
-            global it
-            global pos
-            it = 1
-            pos = 0
-            loop = asyncio.get_event_loop()
-            for i in range(int(pages)):
-                randomUA = randomUserAgent()
-                htmlContent = pageRequest(baseUrl)
-                soup = BeautifulSoup(htmlContent, 'lxml')
-                IDs = productIdsExtractor(soup, pbar, i)
-                if not len(IDs):
-                    pbar.write("[x] Amazon is blocking your requests, please change IP")
-                    exit()
-                for key in IDs:
-                    task = asyncio.ensure_future(fetchSellersList(key, writer, i, randomUA, sbar))
-                    tasks.append(task)
-                pageLink = soup.find_all('span', attrs = {'class': 'pagnLink'})
-                if it > 1:
-                     pos = 1
-                ll = list(pageLink)[pos].find('a')['href']
-                baseUrl = site + ll
-                it += 1
-                pbar.update(1)
-            pbar.close()
-            loop.run_until_complete(asyncio.wait(tasks))
-            loop.close()
+    _tqdm_total = int(pages)
+    _tqdm_init = 0
+    _tqdm_desc = "[<] Extracting ids from pages"
+    with tqdm(total=_tqdm_total, initial=_tqdm_init, desc=_tqdm_desc) as pbar:
+        it = 1
+        pos = 0
+        loop = asyncio.get_event_loop()
+        for i in range(int(pages)):
+            randomUA = randomUserAgent()
+            htmlContent = pageRequest(baseUrl)
+            soup = BeautifulSoup(htmlContent, 'lxml')
+            IDs = productIdsExtractor(soup)
+            if not len(IDs):
+                pbar.write("[x] Amazon is blocking your requests, please change IP")
+                exit()
+            for key in IDs:
+                task = asyncio.ensure_future(fetchSellersList(key, writer, i, randomUA, pbar))
+                tasks.append(task)
+            pageLink = soup.find_all('span', attrs = {'class': 'pagnLink'})
+            if it > 1:
+                 pos = 1
+            ll = list(pageLink)[pos].find('a')['href']
+            baseUrl = site + ll
+            it += 1
+            pbar.update(1)
+        pbar.clear()
+        pbar.set_description("[<] Extracting sellers info")
+        loop.run_until_complete(asyncio.wait(tasks))
+        loop.close()
