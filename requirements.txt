@@ -1,4 +1,6 @@
 certifi
 beautifulsoup4
 lxml
-pysocks
+asyncio
+aiohttp
+tqdm
