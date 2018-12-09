@@ -45,11 +45,6 @@ filename = input() + ".csv"
 _products_id = {}
 _sellers_id = {}
 
-itemScoreDict = {
-    "1": "Pass",
-    "2": "Warn",
-    "3": "Fail"
-}
 
 def randomUserAgent():
     _httpPool = urllib3.PoolManager( 10,
@@ -103,7 +98,7 @@ def sellerFeedbackExtractor(soup):
             print(Fore.RED + "\n[x] Error while getting feedback from seller" +
                  ", please check manually the next result")
         return _feedback
-    return ""
+    return str(0)
 
 def sellerDescExtractor(soup):
     about = soup.find('span', id='about-seller-text')
@@ -130,12 +125,17 @@ def sellerListingsFetcher(id):
     _soup = BeautifulSoup(_htmlContent, 'lxml')
     resultsCount = _soup.find('span', attrs = {'id': 's-result-count'})
     if resultsCount:
-        _results = re.search(' [\d]{1,7} ', resultsCount.text).group(0).strip()
+        try:
+            _results = re.search(' [\d]{1,7} ', resultsCount.text).group(0).strip()
+        except AttributeError:
+            print("\n[x] Amazon is blocking your requests, please change IP")
+            _results = "not-found"
         return _results
     #f = open(id+'.html', "w")
     #f.write(str(_response))
     #f.close()
-    return str(resultsCount)
+    print("\n[x] Amazon is blocking your requests, please change IP")
+    return "not-found"
 
 def extractSellerInfo(link):
     url = site + link
