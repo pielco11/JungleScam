@@ -195,7 +195,7 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
                     })
         sbar.update(1)
 
-site = "https://" + baseUrl.split('//')[1].split('/')[0]
+site = "https://" + baseUrl.split('/')[2]
 
 mode = "w"
 tasks = []
