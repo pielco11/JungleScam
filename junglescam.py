@@ -8,7 +8,6 @@ import random
 import time
 from json import loads
 
-from urllib3.contrib.socks import SOCKSProxyManager
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 import asyncio
@@ -38,6 +37,8 @@ print (Fore.CYAN + 'Insert your URL')
 baseUrl = input()
 print (Fore.CYAN + 'How many pages do you want to scan?')
 pages = input()
+print (Fore.CYAN + 'Threshold feedback?')
+threshold = input()
 print (Fore.CYAN + 'What do you want to call the csv?')
 filename = input() + ".csv"
 
@@ -78,12 +79,6 @@ async def asyncRequest(url, randomUserAgent):
         except aiohttp.client_exceptions.ClientConnectorError:
             print(Fore.RED + "\n[x] Error while fetching data from Amazon!")
 
-def reviewMetaCheck(itemID):
-    _url = 'https://reviewmeta.com/api/amazon/{}'.format(itemID)
-    _result = pageRequest(_url)
-    score = loads(_result.decode('utf-8'))['s_overall']
-    return score
-
 def productIdsExtractor(soup):
     global _products_id
     for link in soup.find_all('a', href=re.compile('www.amazon.com/[\w-]{1,100}/dp/[\w]{2,20}/ref=sr_1_[\d]{1,3}')):
@@ -99,7 +94,7 @@ def sellerIdExtractor(link):
     _seller_id = link.split("seller=")[1]
     return _seller_id
 
-def sellerStarsExtractor(soup):
+def sellerFeedbackExtractor(soup):
     _out_of = soup.find_all('span', attrs = {'class': 'a-color-success'})
     if _out_of:
         try:
@@ -107,7 +102,6 @@ def sellerStarsExtractor(soup):
         except:
             print(Fore.RED + "\n[x] Error while getting feedback from seller" +
                  ", please check manually the next result")
-            input()
         return _feedback
     return 0
 
@@ -132,20 +126,15 @@ def sellerJustLaunched(soup):
 
 def sellerListingsFetcher(id):
     _url = 'https://www.amazon.com/s?me={}'.format(id)
-    _proxy = SOCKSProxyManager('socks5://localhost:9050',
-        cert_reqs='CERT_REQUIRED',
-        ca_certs=certifi.where(),
-        headers={'user-agent': randomUserAgent()})
-    _response =  _proxy.request('GET', _url)
-    _htmlContent =  _response.data
+    _htmlContent =  pageRequest(_url)
     _soup = BeautifulSoup(_htmlContent, 'lxml')
     resultsCount = _soup.find('span', attrs = {'id': 's-result-count'})
     if resultsCount:
         _results = re.search(' [\d]{1,7} ', resultsCount.text).group(0).strip()
         return _results
-    f = open(id+'.html', "w")
-    f.write(str(_response))
-    f.close()
+    #f = open(id+'.html', "w")
+    #f.write(str(_response))
+    #f.close()
     return str(resultsCount)
 
 def extractSellerInfo(link):
@@ -167,8 +156,8 @@ def extractSellerInfo(link):
     except KeyError:
         _sellers_id[sellerID] = True
         if not JL_bool:
-            sellerFull['feedback'] = sellerStarsExtractor(_soup)
-            if int(sellerFull['feedback']) > 75:
+            sellerFull['feedback'] = sellerFeedbackExtractor(_soup)
+            if int(sellerFull['feedback']) > int(threshold):
                 return {}
         sellerFull['desc'] = sellerDescExtractor(_soup)
         sellerFull['listings'] = sellerListingsFetcher(sellerID)
@@ -176,7 +165,6 @@ def extractSellerInfo(link):
 
 async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
     checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
-    time.sleep(1)
     _htmlContent = pageRequest(checkUrl)
     _soup = BeautifulSoup(_htmlContent, 'lxml')
     divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
@@ -184,21 +172,6 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
         title = _soup.find('title').text.strip().strip("Amazon.com: Buying Choices: ")
     except AttributeError:
         title = str(_soup.find('title'))
-    itemScore = reviewMetaCheck(itemID)
-    itemLink = ""
-    try:
-        itemLink = f"https://www.amazon.com/dp/{itemID}/"
-        if int(itemScore) == 3:
-            itemScore = itemScoreDict[itemScore]
-            sbar.write("[+] item ID: " + itemID +
-                        "\n -- RM score: " + itemScore +
-                        "\n -- Link: " + itemLink)
-    except ValueError:
-        pass
-        #itemScore = "none"
-        #sbar.write("[+] item ID: " + itemID +
-        #            "\n -- RM score: " + itemScore +
-        #            "\n -- Link: " + itemLink)
     for div in divs:
         _name = div.find('h3', attrs = {'class': 'olpSellerName'})
         name = _name.text.strip()
