@@ -4,4 +4,3 @@ lxml
 asyncio
 aiohttp
 tqdm
-pysocks
