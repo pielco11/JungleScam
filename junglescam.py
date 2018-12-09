@@ -37,7 +37,7 @@ print (Fore.CYAN + 'Insert your URL')
 baseUrl = input()
 print (Fore.CYAN + 'How many pages do you want to scan?')
 pages = input()
-print (Fore.CYAN + 'Threshold feedback?')
+print (Fore.CYAN + 'Maximum Seller Feeback (%)')
 threshold = input()
 print (Fore.CYAN + 'What do you want to call the csv?')
 filename = input() + ".csv"
