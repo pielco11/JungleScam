@@ -103,7 +103,7 @@ def sellerFeedbackExtractor(soup):
             print(Fore.RED + "\n[x] Error while getting feedback from seller" +
                  ", please check manually the next result")
         return _feedback
-    return 0
+    return ""
 
 def sellerDescExtractor(soup):
     about = soup.find('span', id='about-seller-text')
