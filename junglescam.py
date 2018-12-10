@@ -129,13 +129,13 @@ def sellerListingsFetcher(id):
             _results = re.search(' [\d]{1,7} ', resultsCount.text).group(0).strip()
         except AttributeError:
             print("\n[x] Amazon is blocking your requests, please change IP")
-            _results = "not-found"
+            _results = "blocked"
         return _results
     #f = open(id+'.html', "w")
     #f.write(str(_response))
     #f.close()
     print("\n[x] Amazon is blocking your requests, please change IP")
-    return "not-found"
+    return "blocked"
 
 def extractSellerInfo(link):
     url = site + link
