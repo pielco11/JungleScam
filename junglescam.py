@@ -241,7 +241,7 @@ def extractSellerInfo(link):
         _sellers_id[sellerID] = True
         if not JL_bool:
             sellerFull['feedback'] = sellerFeedbackExtractor(_soup)
-            if int(sellerFull['feedback']) > int(threshold):
+            if int(sellerFull['feedback']) < int(threshold):
                 return {}
         sellerFull['desc'] = sellerDescExtractor(_soup)
         sellerFull['listings'] = sellerListingsFetcher(sellerID)
