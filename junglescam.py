@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 import asyncio
 import aiohttp
+import sqlite3
 
 # setup colored output
 from colorama import init
@@ -41,10 +42,84 @@ print (Fore.CYAN + 'Maximum Seller Feedback (%)')
 threshold = input()
 print (Fore.CYAN + 'What do you want to call the csv?')
 filename = input() + ".csv"
+print (Fore.CYAN + 'What do you want to call the database? (if it does not exist, a new one will be created)')
+dbName = input() + ".db"
 
 _products_id = {}
 _sellers_id = {}
 
+def initDB(db):
+    dbConnector = sqlite3.connect(db)
+    cursor = dbConnector.cursor()
+
+    tableProducts = """
+        CREATE TABLE IF NOT EXISTS
+            products (
+                id TEXT PRIMARY KEY NOT NULL
+            );
+        """
+    cursor.execute(tableProducts)
+
+    tableSellers = """
+        CREATE TABLE IF NOT EXISTS
+            sellers (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                JL INTEGER,
+                feedback INTERGER,
+                listings INTERGER
+            );
+        """
+    cursor.execute(tableSellers)
+
+    tableDesc = """
+        CREATE TABLE IF NOT EXISTS
+            extras (
+                id TEXT NOT NULL,
+                contact INTEGER,
+                gmail INTEGER,
+                yahoo INTEGER,
+                paypal INTEGER,
+                FOREIGN KEY(id) REFERENCES sellers(id)
+            );
+        """
+    cursor.execute(tableDesc)
+
+    tableWhoSellsWhat = """
+        CREATE TABLE IF NOT EXISTS
+            wsw (
+                product_id TEXT NOT NULL,
+                seller_id TEXT NOT NULL,
+                FOREIGN KEY(product_id) REFERENCES products(id),
+                FOREIGN KEY(seller_id) REFERENCES sellers(id)
+            );
+        """
+    cursor.execute(tableWhoSellsWhat)
+
+    return dbConnector
+
+dbConnector = initDB(dbName)
+
+def insertProduct(productID):
+    cursor = dbConnector.cursor()
+    cursor.execute('INSERT INTO products VALUES(?)', (productID,))
+    dbConnector.commit()
+
+def insertSeller(productID, sellerInfo):
+    cursor = dbConnector.cursor()
+    cursor.execute('INSERT INTO sellers VALUES(?,?,?,?,?)', sellerInfo)
+    cursor.execute('INSERT INTO wsw VALUES(?,?)', (productID, sellerInfo[0]))
+    dbConnector.commit()
+
+def insertExtra(sellerID, extras):
+    _contact = ('contact' in extras)*1
+    _gmail = ('gmail' in extras)*1
+    _yahoo = ('yahoo' in extras)*1
+    _paypal = ('paypal' in extras)*1
+    _extras = (sellerID, _contact, _gmail, _yahoo, _paypal)
+    cursor = dbConnector.cursor()
+    cursor.execute('INSERT INTO extras VALUES(?,?,?,?,?)', _extras)
+    dbConnector.commit()
 
 def randomUserAgent():
     _httpPool = urllib3.PoolManager( 10,
@@ -168,10 +243,7 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
     _htmlContent = pageRequest(checkUrl)
     _soup = BeautifulSoup(_htmlContent, 'lxml')
     divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
-    try:
-        title = _soup.find('title').text.strip().strip("Amazon.com: Buying Choices: ")
-    except AttributeError:
-        title = str(_soup.find('title'))
+    insertProduct(itemID)
     for div in divs:
         _name = div.find('h3', attrs = {'class': 'olpSellerName'})
         name = _name.text.strip()
@@ -193,6 +265,9 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
                     'listings': sellerFull['listings'],
                     'desc': sellerFull['desc']
                     })
+                _sellerFull = (sellerFull['id'], str(name), sellerFull['just-launched'], sellerFull['feedback'], sellerFull['listings'])
+                insertSeller(itemID, _sellerFull)
+                insertExtra(sellerFull['id'], sellerFull['desc'])
         sbar.update(1)
 
 site = "https://" + baseUrl.split('/')[2]
@@ -238,3 +313,4 @@ with open(filename, mode=mode) as csv_file:
         pbar.set_description("[<] Extracting sellers info")
         loop.run_until_complete(asyncio.wait(tasks))
         loop.close()
+        dbConnector.close()
