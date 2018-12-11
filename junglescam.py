@@ -101,15 +101,21 @@ def initDB(db):
 dbConnector = initDB(dbName)
 
 def insertProduct(productID):
-    cursor = dbConnector.cursor()
-    cursor.execute('INSERT INTO products VALUES(?)', (productID,))
-    dbConnector.commit()
+    try:
+        cursor = dbConnector.cursor()
+        cursor.execute('INSERT INTO products VALUES(?)', (productID,))
+        dbConnector.commit()
+    except sqlite3.IntegrityError:
+        pass
 
 def insertSeller(productID, sellerInfo):
-    cursor = dbConnector.cursor()
-    cursor.execute('INSERT INTO sellers VALUES(?,?,?,?,?)', sellerInfo)
-    cursor.execute('INSERT INTO wsw VALUES(?,?)', (productID, sellerInfo[0]))
-    dbConnector.commit()
+    try:
+        cursor = dbConnector.cursor()
+        cursor.execute('INSERT INTO sellers VALUES(?,?,?,?,?)', sellerInfo)
+        cursor.execute('INSERT INTO wsw VALUES(?,?)', (productID, sellerInfo[0]))
+        dbConnector.commit()
+    except sqlite3.IntegrityError:
+        pass
 
 def insertExtra(sellerID, extras):
     _contact = ('contact' in extras)*1
@@ -117,9 +123,12 @@ def insertExtra(sellerID, extras):
     _yahoo = ('yahoo' in extras)*1
     _paypal = ('paypal' in extras)*1
     _extras = (sellerID, _contact, _gmail, _yahoo, _paypal)
-    cursor = dbConnector.cursor()
-    cursor.execute('INSERT INTO extras VALUES(?,?,?,?,?)', _extras)
-    dbConnector.commit()
+    try:
+        cursor = dbConnector.cursor()
+        cursor.execute('INSERT INTO extras VALUES(?,?,?,?,?)', _extras)
+        dbConnector.commit()
+    except sqlite3.IntegrityError:
+        pass
 
 def randomUserAgent():
     _httpPool = urllib3.PoolManager( 10,
