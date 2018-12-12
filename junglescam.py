@@ -48,6 +48,8 @@ dbName = input() + ".db"
 _products_id = {}
 _sellers_id = {}
 
+roundRobin = 0
+
 def initDB(db):
     dbConnector = sqlite3.connect(db)
     cursor = dbConnector.cursor()
@@ -144,8 +146,17 @@ http = urllib3.PoolManager( 10,
     ca_certs=certifi.where(),
     headers={'user-agent': randomUserAgent()})
 
+_proxy = SOCKSProxyManager('socks5://localhost:9050',
+    cert_reqs='CERT_REQUIRED',
+    ca_certs=certifi.where(),
+    headers={'user-agent': randomUserAgent()})
+
 def pageRequest(url):
-    response = http.request('GET', url)
+    if roundRobin % 2:
+        response = http.request('GET', url)
+    else:
+        response =  _proxy.request('GET', _url)
+    roundRobin += 1
     return response.data
 
 async def asyncRequest(url, randomUserAgent):
