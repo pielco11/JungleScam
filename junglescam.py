@@ -157,7 +157,7 @@ def pageRequest(url):
     if roundRobin % 2:
         response = http.request('GET', url)
     else:
-        response =  proxy.request('GET', url)
+        response = proxy.request('GET', url)
     roundRobin += 1
     return response.data
 
@@ -191,10 +191,10 @@ def sellerFeedbackExtractor(soup):
     if _out_of:
         try:
             _feedback = list(_out_of)[len(_out_of) - 1].text
+            return _feedback
         except:
             print(Fore.RED + "\n[x] Error while getting feedback from seller" +
                  ", please check manually the next result")
-        return _feedback
     return str(0)
 
 def sellerDescExtractor(soup):
@@ -287,7 +287,13 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
                     'listings': sellerFull['listings'],
                     'desc': sellerFull['desc']
                     })
-                _sellerFull = (sellerFull['id'], str(name), sellerFull['just-launched'], sellerFull['feedback'], sellerFull['listings'])
+                _t_JL = int(sellerFull['just-launched']*1) + 0
+                _t_feedback = int(sellerFull['feedback'])
+                try:
+                    _t_listings = int(sellerFull['listings'])
+                except ValueError:
+                    _t_listings = -1
+                _sellerFull = (sellerFull['id'], str(name), _t_JL, _t_feedback, _t_listings)
                 insertSeller(itemID, _sellerFull)
                 insertExtra(sellerFull['id'], sellerFull['desc'])
         sbar.update(1)
