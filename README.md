@@ -3,6 +3,10 @@
 
 ![img](https://i.imgur.com/M688WRn.png)
 
+## External Dependencies
+
+Tor is required to round-robin requests.
+
 ## How-to
 
 Run `python3 junglescam.py` and follow the instructions.
