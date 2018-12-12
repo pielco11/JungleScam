@@ -8,6 +8,7 @@ import random
 import time
 from json import loads
 
+from urllib3.contrib.socks import SOCKSProxyManager
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 import asyncio
@@ -146,16 +147,17 @@ http = urllib3.PoolManager( 10,
     ca_certs=certifi.where(),
     headers={'user-agent': randomUserAgent()})
 
-_proxy = SOCKSProxyManager('socks5://localhost:9050',
+proxy = SOCKSProxyManager('socks5://localhost:9050',
     cert_reqs='CERT_REQUIRED',
     ca_certs=certifi.where(),
     headers={'user-agent': randomUserAgent()})
 
 def pageRequest(url):
+    global roundRobin
     if roundRobin % 2:
         response = http.request('GET', url)
     else:
-        response =  _proxy.request('GET', _url)
+        response =  proxy.request('GET', url)
     roundRobin += 1
     return response.data
 
