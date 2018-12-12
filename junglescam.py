@@ -302,7 +302,7 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
                 try:
                     _t_feedback = int(sellerFull['feedback'])
                 except ValueError:
-                    _t_listings = -1
+                    _t_feedback = -1
                 try:
                     _t_listings = int(sellerFull['listings'])
                 except ValueError:
