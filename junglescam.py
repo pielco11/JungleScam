@@ -47,7 +47,7 @@ print (Fore.CYAN + 'What do you want to call the database? (if it does not exist
 dbName = input() + ".db"
 print (Fore.CYAN + 'Use Tor to round-robin requests? (Y/N)')
 torSupport = input()
-if torSupport == "Y":
+if torSupport.lower() == "Y":
     torSupport = True
 else:
     torSupport = False
