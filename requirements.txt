@@ -4,3 +4,4 @@ lxml
 asyncio
 aiohttp
 tqdm
+colorama
