@@ -45,6 +45,12 @@ print (Fore.CYAN + 'What do you want to call the csv?')
 filename = input() + ".csv"
 print (Fore.CYAN + 'What do you want to call the database? (if it does not exist, a new one will be created)')
 dbName = input() + ".db"
+print (Fore.CYAN + 'Use Tor to round-robin requests? (Y/N)')
+torSupport = input()
+if torSupport == "Y":
+    torSupport = True
+else:
+    torSupport = False
 
 _products_id = {}
 _sellers_id = {}
@@ -157,7 +163,10 @@ def pageRequest(url):
     if roundRobin % 2:
         response = http.request('GET', url)
     else:
-        response = proxy.request('GET', url)
+        if torSupport:
+            response = proxy.request('GET', url)
+        else:
+            response = http.request('GET', url)
     roundRobin += 1
     return response.data
 
