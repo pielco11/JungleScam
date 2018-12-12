@@ -195,7 +195,7 @@ def sellerFeedbackExtractor(soup):
         except:
             print(Fore.RED + "\n[x] Error while getting feedback from seller" +
                  ", please check manually the next result")
-    return str(0)
+    return '-1'
 
 def sellerDescExtractor(soup):
     about = soup.find('span', id='about-seller-text')
@@ -287,8 +287,13 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
                     'listings': sellerFull['listings'],
                     'desc': sellerFull['desc']
                     })
-                _t_JL = int(sellerFull['just-launched']*1) + 0
-                _t_feedback = int(sellerFull['feedback'])
+                _t_JL = 0
+                if sellerFull['just-launched']:
+                    _t_JL = 1
+                try:
+                    _t_feedback = int(sellerFull['feedback'])
+                except ValueError:
+                    _t_listings = -1
                 try:
                     _t_listings = int(sellerFull['listings'])
                 except ValueError:
