@@ -75,8 +75,7 @@ def initDB(db):
                 id TEXT PRIMARY KEY NOT NULL,
                 name TEXT NOT NULL,
                 JL INTEGER,
-                feedback INTERGER,
-                listings INTERGER
+                feedback INTERGER
             );
         """
     cursor.execute(tableSellers)
@@ -120,7 +119,7 @@ def insertProduct(productID):
 def insertSeller(productID, sellerInfo):
     try:
         cursor = dbConnector.cursor()
-        cursor.execute('INSERT INTO sellers VALUES(?,?,?,?,?)', sellerInfo)
+        cursor.execute('INSERT INTO sellers VALUES(?,?,?,?)', sellerInfo)
         cursor.execute('INSERT INTO wsw VALUES(?,?)', (productID, sellerInfo[0]))
         dbConnector.commit()
     except sqlite3.IntegrityError:
@@ -225,24 +224,6 @@ def sellerJustLaunched(soup):
         return "True"
     return ""
 
-def sellerListingsFetcher(id):
-    _url = 'https://www.amazon.com/s?me={}'.format(id)
-    _htmlContent =  pageRequest(_url)
-    _soup = BeautifulSoup(_htmlContent, 'lxml')
-    resultsCount = _soup.find('span', attrs = {'id': 's-result-count'})
-    if resultsCount:
-        try:
-            _results = re.search(' [\d]{1,7} ', resultsCount.text).group(0).strip()
-        except AttributeError:
-            print("\n[x] Amazon is blocking your requests, please change IP")
-            _results = "blocked"
-        return _results
-    #f = open(id+'.html', "w")
-    #f.write(str(_response))
-    #f.close()
-    print("\n[x] Amazon is blocking your requests, please change IP")
-    return "blocked"
-
 def extractSellerInfo(link):
     url = site + link
     _htmlContent = pageRequest(url)
@@ -253,7 +234,6 @@ def extractSellerInfo(link):
         'id': sellerID,
         'feedback': '',
         'desc': '',
-        'listings': '',
         'just-launched': JL_bool
     }
     try:
@@ -266,7 +246,6 @@ def extractSellerInfo(link):
             if int(sellerFull['feedback']) > int(threshold):
                 return {}
         sellerFull['desc'] = sellerDescExtractor(_soup)
-        sellerFull['listings'] = sellerListingsFetcher(sellerID)
         return sellerFull
 
 async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
@@ -285,15 +264,13 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
                 sbar.write("<-> " + name + "\n |-> id: " + sellerFull['id']
                     + "\n |-> just-launched: " + sellerFull['just-launched']
                     + "\n |-> feedback: " + sellerFull['feedback']
-                    + "\n |-> desc: " + sellerFull['desc']
-                    + "\n --- listings: " + sellerFull['listings'])
+                    + "\n --- desc: " + sellerFull['desc']
                 writer.writerow({
                     'id': sellerFull['id'],
                     'name': str(name),
                     'link': site + sellerLink,
                     'just-launched': sellerFull['just-launched'],
                     'feedback': sellerFull['feedback'],
-                    'listings': sellerFull['listings'],
                     'desc': sellerFull['desc']
                     })
                 _t_JL = 0
@@ -303,11 +280,7 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
                     _t_feedback = int(sellerFull['feedback'])
                 except ValueError:
                     _t_feedback = -1
-                try:
-                    _t_listings = int(sellerFull['listings'])
-                except ValueError:
-                    _t_listings = -1
-                _sellerFull = (sellerFull['id'], str(name), _t_JL, _t_feedback, _t_listings)
+                _sellerFull = (sellerFull['id'], str(name), _t_JL, _t_feedback)
                 insertSeller(itemID, _sellerFull)
                 insertExtra(sellerFull['id'], sellerFull['desc'])
         sbar.update(1)
@@ -321,7 +294,7 @@ loop = asyncio.get_event_loop()
 if os.path.exists(filename):
     mode = "a"
 with open(filename, mode=mode) as csv_file:
-    fieldnames = ['id', 'name', 'link', 'just-launched', 'feedback', 'listings', 'desc']
+    fieldnames = ['id', 'name', 'link', 'just-launched', 'feedback', 'desc']
     global writer
     writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
     if mode == "w":
