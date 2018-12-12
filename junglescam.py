@@ -33,19 +33,24 @@ print (Fore.YELLOW + """
  .d88P"                    Y8b d88P
 888P"                       "Y88P"
 """)
-print (Fore.CYAN + 'An Amazon OSINT scraper for potential scam accounts')
-print (Fore.YELLOW + 'By @jakecreps & @noneprivacy')
-print (Fore.CYAN + 'Insert your URL')
+print(Fore.CYAN + 'An Amazon OSINT scraper for potential scam accounts')
+print(Fore.YELLOW + 'By @jakecreps & @noneprivacy')
+print(Fore.CYAN + 'Insert your URL')
 baseUrl = input()
-print (Fore.CYAN + 'How many pages do you want to scan?')
+print(Fore.CYAN + 'How many pages do you want to scan?')
 pages = input()
-print (Fore.CYAN + 'Maximum Seller Feedback (%)')
+print(Fore.CYAN + 'Are you starting from the first page? (Y/N)')
+_firstPage = input()
+pos = 0
+if _firstPage.lower() == "n":
+    pos = 1
+print(Fore.CYAN + 'Maximum Seller Feedback (%)')
 threshold = input()
-print (Fore.CYAN + 'What do you want to call the csv?')
+print(Fore.CYAN + 'What do you want to call the csv?')
 filename = input() + ".csv"
-print (Fore.CYAN + 'What do you want to call the database? (if it does not exist, a new one will be created)')
+print(Fore.CYAN + 'What do you want to call the database? (if it does not exist, a new one will be created)')
 dbName = input() + ".db"
-print (Fore.CYAN + 'Use Tor to round-robin requests? (Y/N)')
+print(Fore.CYAN + 'Use Tor to round-robin requests? (Y/N)')
 torSupport = input()
 if torSupport.lower() == "y":
     torSupport = True
@@ -138,6 +143,16 @@ def insertExtra(sellerID, extras):
     except sqlite3.IntegrityError:
         pass
 
+def getInsertedSellers():
+    cursor = dbConnector.cursor()
+    cursor.execute('SELECT seller_id FROM wsw')
+    allRows = cursor.fetchall()
+    with tqdm(total=len(allRows), desc='[<] Retrieving stored sellers') as cursorBar:
+        for row in allRows:
+            _sellers_id[row[0]] = True
+            cursorBar.update(1)
+    cursorBar.close()
+
 def randomUserAgent():
     _httpPool = urllib3.PoolManager( 10,
         cert_reqs='CERT_REQUIRED',
@@ -213,34 +228,34 @@ def sellerDescExtractor(soup):
         _about = ""
         for w in _whatToFind:
             if w in _text:
-                _about += w + ","
+                _about += w + ','
         _about[:len(_about)-1]
         return _about
-    return ""
+    return ''
 
 def sellerJustLaunched(soup):
     JL_bool = soup.find('span', id='feedback-no-rating')
     if JL_bool:
-        return "True"
-    return ""
+        return 'True'
+    return ''
 
 def extractSellerInfo(link):
-    url = site + link
-    _htmlContent = pageRequest(url)
-    _soup = BeautifulSoup(_htmlContent, 'lxml')
-    JL_bool = sellerJustLaunched(_soup)
     sellerID = sellerIdExtractor(link)
-    sellerFull = {
-        'id': sellerID,
-        'feedback': '',
-        'desc': '',
-        'just-launched': JL_bool
-    }
     try:
         _sID = _sellers_id[sellerID]
         return {}
     except KeyError:
         _sellers_id[sellerID] = True
+        url = site + link
+        _htmlContent = pageRequest(url)
+        _soup = BeautifulSoup(_htmlContent, 'lxml')
+        JL_bool = sellerJustLaunched(_soup)
+        sellerFull = {
+            'id': sellerID,
+            'feedback': '',
+            'desc': '',
+            'just-launched': JL_bool
+        }
         if not JL_bool:
             sellerFull['feedback'] = sellerFeedbackExtractor(_soup)
             if int(sellerFull['feedback']) > int(threshold):
@@ -278,11 +293,11 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
                     _t_JL = 1
                 try:
                     _t_feedback = int(sellerFull['feedback'])
+                    _sellerFull = (sellerFull['id'], str(name), _t_JL, _t_feedback)
+                    insertSeller(itemID, _sellerFull)
+                    insertExtra(sellerFull['id'], sellerFull['desc'])
                 except ValueError:
-                    _t_feedback = -1
-                _sellerFull = (sellerFull['id'], str(name), _t_JL, _t_feedback)
-                insertSeller(itemID, _sellerFull)
-                insertExtra(sellerFull['id'], sellerFull['desc'])
+                    pass
         sbar.update(1)
 
 site = "https://" + baseUrl.split('/')[2]
@@ -303,8 +318,8 @@ with open(filename, mode=mode) as csv_file:
     _tqdm_init = 0
     _tqdm_desc = "[<] Extracting ids from pages"
     with tqdm(total=_tqdm_total, initial=_tqdm_init, desc=_tqdm_desc) as pbar:
+        getInsertedSellers()
         it = 1
-        pos = 0
         loop = asyncio.get_event_loop()
         for i in range(int(pages)):
             randomUA = randomUserAgent()
