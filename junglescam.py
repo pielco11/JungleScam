@@ -264,7 +264,7 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
                 sbar.write("<-> " + name + "\n |-> id: " + sellerFull['id']
                     + "\n |-> just-launched: " + sellerFull['just-launched']
                     + "\n |-> feedback: " + sellerFull['feedback']
-                    + "\n --- desc: " + sellerFull['desc']
+                    + "\n --- desc: " + sellerFull['desc'])
                 writer.writerow({
                     'id': sellerFull['id'],
                     'name': str(name),
