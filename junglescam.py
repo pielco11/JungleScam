@@ -39,11 +39,6 @@ print(Fore.CYAN + 'Insert your keyword')
 baseUrl = 'https://www.amazon.com/s/ref=nb_sb_noss?url=search-alias%3Daps&field-keywords=' + input()
 print(Fore.CYAN + 'How many pages do you want to scan?')
 pages = input()
-print(Fore.CYAN + 'Are you starting from the first page? (Y/N)')
-_firstPage = input()
-pos = 0
-if _firstPage.lower() == "n":
-    pos = 1
 print(Fore.CYAN + 'Maximum Seller Feedback (%)')
 threshold = input()
 print(Fore.CYAN + 'What do you want to call the csv?')
