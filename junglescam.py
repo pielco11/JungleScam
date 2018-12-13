@@ -276,28 +276,29 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
             sellerLink = _name.find('a')['href']
             sellerFull = extractSellerInfo(sellerLink)
             if sellerFull:
-                sbar.write("<-> " + name + "\n |-> id: " + sellerFull['id']
-                    + "\n |-> just-launched: " + sellerFull['just-launched']
-                    + "\n |-> feedback: " + sellerFull['feedback']
-                    + "\n --- desc: " + sellerFull['desc'])
-                writer.writerow({
-                    'id': sellerFull['id'],
-                    'name': str(name),
-                    'link': site + sellerLink,
-                    'just-launched': sellerFull['just-launched'],
-                    'feedback': sellerFull['feedback'],
-                    'desc': sellerFull['desc']
-                    })
-                _t_JL = 0
-                if sellerFull['just-launched']:
-                    _t_JL = 1
-                try:
-                    _t_feedback = int(sellerFull['feedback'])
+                if not sellerFull['feedback'] == '-1':
+                    sbar.write("<-> " + name + "\n |-> id: " + sellerFull['id']
+                        + "\n |-> just-launched: " + sellerFull['just-launched']
+                        + "\n |-> feedback: " + sellerFull['feedback']
+                        + "\n --- desc: " + sellerFull['desc'])
+                    writer.writerow({
+                        'id': sellerFull['id'],
+                        'name': str(name),
+                        'link': site + sellerLink,
+                        'just-launched': sellerFull['just-launched'],
+                        'feedback': sellerFull['feedback'],
+                        'desc': sellerFull['desc']
+                        })
+                    _t_JL = 0
+                    if sellerFull['just-launched']:
+                        _t_JL = 1
+                    try:
+                        _t_feedback = int(sellerFull['feedback'])
+                    except ValueError:
+                        _t_feedback = -2
                     _sellerFull = (sellerFull['id'], str(name), _t_JL, _t_feedback)
                     insertSeller(itemID, _sellerFull)
                     insertExtra(sellerFull['id'], sellerFull['desc'])
-                except ValueError:
-                    pass
         sbar.update(1)
 
 site = "https://" + baseUrl.split('/')[2]
