@@ -301,6 +301,7 @@ site = "https://" + baseUrl.split('/')[2]
 mode = "w"
 tasks = []
 loop = asyncio.get_event_loop()
+pos = 0
 
 if os.path.exists(filename):
     mode = "a"
