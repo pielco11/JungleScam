@@ -119,9 +119,12 @@ def insertProduct(productID):
 def insertSeller(productID, sellerInfo):
     try:
         cursor = dbConnector.cursor()
-        cursor.execute('INSERT INTO sellers VALUES(?,?,?,?)', sellerInfo)
         cursor.execute('INSERT INTO wsw VALUES(?,?)', (productID, sellerInfo[0]))
         dbConnector.commit()
+    except sqlite3.IntegrityError:
+        pass
+    try:
+        cursor.execute('INSERT INTO sellers VALUES(?,?,?,?)', sellerInfo)
     except sqlite3.IntegrityError:
         pass
 
