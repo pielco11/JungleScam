@@ -208,7 +208,7 @@ def sellerListExtractor(sellerListLink, sbar):
         _soup = BeautifulSoup(_htmlContent, 'lxml')
         _t = _soup.find('title').text
         if _t == 'Sorry! Something went wrong!':
-            sbar.write('[x] title: {}'.format(_t))
+            sbar.write('[x] {}'.format(_t))
             return divs
         _divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
         for _d in _divs:
