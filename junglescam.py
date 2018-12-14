@@ -191,7 +191,7 @@ async def asyncRequest(url, randomUserAgent):
 
 def productIdsExtractor(soup):
     global _products_id
-    for link in soup.find_all('a', href=re.compile('www.amazon.com/[\w-]{1,100}/dp/[\w]{2,20}/ref=sr_1_[\d]{1,3}')):
+    for link in soup.find_all('a', href=re.compile('/dp/[\w]{2,20}/ref=sr_1_[\d]{1,3}')):
         l = link.get('href')
         _l = l.split('/')
         try:
@@ -199,6 +199,27 @@ def productIdsExtractor(soup):
         except KeyError:
             _products_id.update({_l[5]: l})
     return _products_id
+
+def sellerListExtractor(sellerListLink, sbar):
+    divs = []
+    i = 0
+    while True:
+        _htmlContent = pageRequest(sellerListLink)
+        _soup = BeautifulSoup(_htmlContent, 'lxml')
+        _t = _soup.find('title').text
+        if _t == 'Sorry! Something went wrong!':
+            sbar.write('[x] title: {}'.format(_t))
+            return divs
+        _divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
+        for _d in _divs:
+            divs.append(_d)
+        sellerListLink = _soup.find('li', attrs = {'class': 'a-last'})
+        if not sellerListLink:
+            break
+        sellerListLink = site + sellerListLink.find('a')['href']
+        i += 1
+    return divs
+
 
 def sellerIdExtractor(link, sbar):
     try:
@@ -264,12 +285,10 @@ def extractSellerInfo(link, itemID, sbar):
             return sellerFull
     return {}
 
-async def fetchSellersList(itemID, writer, sbar):
-    checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
-    _htmlContent = pageRequest(checkUrl)
-    _soup = BeautifulSoup(_htmlContent, 'lxml')
-    divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
+async def fetchSellersFull(itemID, writer, sbar):
     insertProduct(itemID)
+    checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
+    divs = sellerListExtractor(checkUrl, sbar)
     for div in divs:
         _name = div.find('h3', attrs = {'class': 'olpSellerName'})
         name = _name.text.strip()
@@ -326,17 +345,20 @@ with open(filename, mode=mode) as csv_file:
         for i in range(lPage):
             htmlContent = pageRequest(baseUrl)
             soup = BeautifulSoup(htmlContent, 'lxml')
-            nextPage = soup.find('a', attrs = {'class': 'pagnNext'})['href']
-            baseUrl = site + nextPage
-            if i >= fPage:
-                IDs = productIdsExtractor(soup)
-                if not len(IDs):
-                    pbar.write("[x] Amazon is blocking your requests, please change IP")
-                    exit()
-                for key in IDs:
-                    task = asyncio.ensure_future(fetchSellersList(key, writer, pbar))
-                    tasks.append(task)
-            pbar.update(1)
+            if soup.find('title').text == 'Robot Check':
+                pbar.write('[x] Captcha found, wait a while before retrying or change the IP!')
+            else:
+                nextPage = soup.find('a', attrs = {'class': 'pagnNext'})['href']
+                baseUrl = site + nextPage
+                if i >= fPage:
+                    IDs = productIdsExtractor(soup)
+                    if not len(IDs):
+                        pbar.write("[x] Amazon is blocking your requests, please change IP")
+                        exit()
+                    for key in IDs:
+                        task = asyncio.ensure_future(fetchSellersFull(key, writer, pbar))
+                        tasks.append(task)
+                pbar.update(1)
         pbar.clear()
         pbar.set_description("[<] Extracting sellers info")
         loop.run_until_complete(asyncio.wait(tasks))
