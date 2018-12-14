@@ -200,9 +200,13 @@ def productIdsExtractor(soup):
             _products_id.update({_l[5]: l})
     return _products_id
 
-def sellerIdExtractor(link):
-    _seller_id = link.split("seller=")[1]
-    return _seller_id
+def sellerIdExtractor(link, sbar):
+    try:
+        _seller_id = link.split("seller=")[1]
+        return _seller_id
+    except:
+        sbar.write('[x] got a redirection to another website')
+        return False
 
 def sellerFeedbackExtractor(soup):
     _out_of = soup.find_all('span', attrs = {'class': 'a-color-success'})
@@ -234,29 +238,31 @@ def sellerJustLaunched(soup):
         return 'True'
     return ''
 
-def extractSellerInfo(link, itemID):
-    sellerID = sellerIdExtractor(link)
-    try:
-        _sID = _sellers_id[sellerID][itemID]
-        return {}
-    except KeyError:
-        _sellers_id[sellerID][itemID] = True
-        url = site + link
-        _htmlContent = pageRequest(url)
-        _soup = BeautifulSoup(_htmlContent, 'lxml')
-        JL_bool = sellerJustLaunched(_soup)
-        sellerFull = {
-            'id': sellerID,
-            'feedback': '',
-            'desc': '',
-            'just-launched': JL_bool
-        }
-        if not JL_bool:
-            sellerFull['feedback'] = sellerFeedbackExtractor(_soup)
-            if int(sellerFull['feedback']) > int(threshold):
-                return {}
-        sellerFull['desc'] = sellerDescExtractor(_soup)
-        return sellerFull
+def extractSellerInfo(link, itemID, sbar):
+    sellerID = sellerIdExtractor(link, sbar)
+    if sellerID:
+        try:
+            _sID = _sellers_id[sellerID][itemID]
+            return {}
+        except KeyError:
+            _sellers_id[sellerID] = {itemID: True}
+            url = site + link
+            _htmlContent = pageRequest(url)
+            _soup = BeautifulSoup(_htmlContent, 'lxml')
+            JL_bool = sellerJustLaunched(_soup)
+            sellerFull = {
+                'id': sellerID,
+                'feedback': '',
+                'desc': '',
+                'just-launched': JL_bool
+            }
+            if not JL_bool:
+                sellerFull['feedback'] = sellerFeedbackExtractor(_soup)
+                if int(sellerFull['feedback']) > int(threshold):
+                    return {}
+            sellerFull['desc'] = sellerDescExtractor(_soup)
+            return sellerFull
+    return {}
 
 async def fetchSellersList(itemID, writer, sbar):
     checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
@@ -269,7 +275,7 @@ async def fetchSellersList(itemID, writer, sbar):
         name = _name.text.strip()
         if name:
             sellerLink = _name.find('a')['href']
-            sellerFull = extractSellerInfo(sellerLink, itemID)
+            sellerFull = extractSellerInfo(sellerLink, itemID, sbar)
             if sellerFull:
                 if not sellerFull['feedback'] == '-1':
                     sbar.write("<-> " + name + "\n |-> id: " + sellerFull['id']
