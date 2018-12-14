@@ -147,7 +147,7 @@ def getInsertedSellers():
     allRows = cursor.fetchall()
     with tqdm(total=len(allRows), desc='[<] Retrieving stored sellers') as cursorBar:
         for row in allRows:
-            _sellers_id[row[0]][row[1]] = True
+            _sellers_id[row[1]] = {row[0]: True}
             cursorBar.update(1)
     cursorBar.close()
 
