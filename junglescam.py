@@ -219,7 +219,7 @@ def sellerListExtractor(sellerListLink, sbar):
         sellerListLink = _soup.find('li', attrs = {'class': 'a-last'})
         try:
             a = sellerListLink.find('a')['href']
-        except TypeError:
+        except AttributeError:
             break
         sellerListLink = site + sellerListLink.find('a')['href']
         i += 1
