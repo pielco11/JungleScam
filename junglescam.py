@@ -37,8 +37,8 @@ print(Fore.CYAN + 'An Amazon OSINT scraper for potential scam accounts')
 print(Fore.YELLOW + 'By @jakecreps & @noneprivacy')
 print(Fore.CYAN + 'Insert your keyword')
 baseUrl = 'https://www.amazon.com/s/ref=nb_sb_noss?url=search-alias%3Daps&field-keywords=' + input()
-print(Fore.CYAN + 'How many pages do you want to scan?')
-pages = input()
+print(Fore.CYAN + 'Which pages do you want to scan? (eg: 1-5)')
+pages = input().split('-')
 print(Fore.CYAN + 'Maximum Seller Feedback (%)')
 threshold = input()
 print(Fore.CYAN + 'What do you want to call the csv?')
@@ -140,11 +140,11 @@ def insertExtra(sellerID, extras):
 
 def getInsertedSellers():
     cursor = dbConnector.cursor()
-    cursor.execute('SELECT seller_id FROM wsw')
+    cursor.execute('SELECT * FROM wsw')
     allRows = cursor.fetchall()
     with tqdm(total=len(allRows), desc='[<] Retrieving stored sellers') as cursorBar:
         for row in allRows:
-            _sellers_id[row[0]] = True
+            _sellers_id[row[0]][row[1]] = True
             cursorBar.update(1)
     cursorBar.close()
 
@@ -234,13 +234,13 @@ def sellerJustLaunched(soup):
         return 'True'
     return ''
 
-def extractSellerInfo(link):
+def extractSellerInfo(link, itemID):
     sellerID = sellerIdExtractor(link)
     try:
-        _sID = _sellers_id[sellerID]
+        _sID = _sellers_id[sellerID][itemID]
         return {}
     except KeyError:
-        _sellers_id[sellerID] = True
+        _sellers_id[sellerID][itemID] = True
         url = site + link
         _htmlContent = pageRequest(url)
         _soup = BeautifulSoup(_htmlContent, 'lxml')
@@ -258,7 +258,7 @@ def extractSellerInfo(link):
         sellerFull['desc'] = sellerDescExtractor(_soup)
         return sellerFull
 
-async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
+async def fetchSellersList(itemID, writer, sbar):
     checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
     _htmlContent = pageRequest(checkUrl)
     _soup = BeautifulSoup(_htmlContent, 'lxml')
@@ -269,7 +269,7 @@ async def fetchSellersList(itemID, writer, myid, randomUserAgent, sbar):
         name = _name.text.strip()
         if name:
             sellerLink = _name.find('a')['href']
-            sellerFull = extractSellerInfo(sellerLink)
+            sellerFull = extractSellerInfo(sellerLink, itemID)
             if sellerFull:
                 if not sellerFull['feedback'] == '-1':
                     sbar.write("<-> " + name + "\n |-> id: " + sellerFull['id']
@@ -301,7 +301,9 @@ site = "https://" + baseUrl.split('/')[2]
 mode = "w"
 tasks = []
 loop = asyncio.get_event_loop()
-pos = 0
+
+fPage = int(pages[0])
+lPage = int(pages[1])
 
 if os.path.exists(filename):
     mode = "a"
@@ -311,30 +313,23 @@ with open(filename, mode=mode) as csv_file:
     writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
     if mode == "w":
         writer.writeheader()
-    _tqdm_total = int(pages)
-    _tqdm_init = 0
     _tqdm_desc = "[<] Extracting ids from pages"
-    with tqdm(total=_tqdm_total, initial=_tqdm_init, desc=_tqdm_desc) as pbar:
+    with tqdm(total=lPage, desc=_tqdm_desc) as pbar:
         getInsertedSellers()
-        it = 1
         loop = asyncio.get_event_loop()
-        for i in range(int(pages)):
-            randomUA = randomUserAgent()
+        for i in range(lPage):
             htmlContent = pageRequest(baseUrl)
             soup = BeautifulSoup(htmlContent, 'lxml')
-            IDs = productIdsExtractor(soup)
-            if not len(IDs):
-                pbar.write("[x] Amazon is blocking your requests, please change IP")
-                exit()
-            for key in IDs:
-                task = asyncio.ensure_future(fetchSellersList(key, writer, i, randomUA, pbar))
-                tasks.append(task)
-            pageLink = soup.find_all('span', attrs = {'class': 'pagnLink'})
-            if it > 1:
-                 pos = 1
-            ll = list(pageLink)[pos].find('a')['href']
-            baseUrl = site + ll
-            it += 1
+            nextPage = soup.find('a', attrs = {'class': 'pagnNext'})['href']
+            baseUrl = site + nextPage
+            if i >= fPage:
+                IDs = productIdsExtractor(soup)
+                if not len(IDs):
+                    pbar.write("[x] Amazon is blocking your requests, please change IP")
+                    exit()
+                for key in IDs:
+                    task = asyncio.ensure_future(fetchSellersList(key, writer, pbar))
+                    tasks.append(task)
             pbar.update(1)
         pbar.clear()
         pbar.set_description("[<] Extracting sellers info")
