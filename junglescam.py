@@ -2,11 +2,11 @@ import sys
 import urllib3
 import certifi
 import re
-import csv
 import os
 import random
 import time
 from json import loads
+import socket
 
 from urllib3.contrib.socks import SOCKSProxyManager
 from bs4 import BeautifulSoup
@@ -41,8 +41,6 @@ print(Fore.CYAN + 'Which pages do you want to scan? (eg: 1-5)')
 pages = input().split('-')
 print(Fore.CYAN + 'Maximum Seller Feedback (%)')
 threshold = input()
-print(Fore.CYAN + 'What do you want to call the csv?')
-filename = input() + ".csv"
 print(Fore.CYAN + 'What do you want to call the database? (if it does not exist, a new one will be created)')
 dbName = input() + ".db"
 print(Fore.CYAN + 'Use Tor to round-robin requests? (Y/N)')
@@ -56,6 +54,11 @@ _products_id = {}
 _sellers_id = {}
 
 roundRobin = 0
+torPort = 9050 # 9150 if using Tor Browser
+torControlPort = 9051 # 9151 if using Tor Browser
+torControlPW = 'password' # append `tor --hash-password "password"` to torrc
+# HashedControlPassword 16:86B89B9EDE48F177605F9BA0732B4BB67B0AC2004F197FBA13A91C95C1
+# don't do this if you don't know what you are doing
 
 def initDB(db):
     dbConnector = sqlite3.connect(db)
@@ -148,9 +151,16 @@ def getInsertedSellers():
     allRows = cursor.fetchall()
     with tqdm(total=len(allRows), desc='[<] Retrieving stored sellers') as cursorBar:
         for row in allRows:
-            _sellers_id[row[1]] = {row[0]: True}
+            _sellers_id[row[1]] = {row[0] : True}
             cursorBar.update(1)
     cursorBar.close()
+
+def newTorIdentity():
+    tor_c = socket.create_connection(('127.0.0.1', torControlPort))
+    tor_c.send('AUTHENTICATE "{}"\r\nSIGNAL NEWNYM\r\n'.format(torControlPW).encode())
+    response = tor_c.recv(1024)
+    if response == b'250 OK\r\n250 OK\r\n':
+        print('[+] new Tor identity')
 
 def getRandomUA():
     _httpPool = urllib3.PoolManager( 1,
@@ -168,7 +178,7 @@ def randomUserAgent():
 
 def pageRequest(url):
     global roundRobin
-        proxy = SOCKSProxyManager('socks5://localhost:9050',
+    proxy = SOCKSProxyManager('socks5://localhost:'+torPort,
         cert_reqs='CERT_REQUIRED',
         ca_certs=certifi.where(),
         headers={'user-agent': randomUserAgent(), 'Cookie': ''})
@@ -176,7 +186,6 @@ def pageRequest(url):
         cert_reqs='CERT_REQUIRED',
         ca_certs=certifi.where(),
         headers={'user-agent': randomUserAgent(), 'Cookie': ''})
-    
     if roundRobin % 2:
         response = http.request('GET', url)
     else:
@@ -185,11 +194,13 @@ def pageRequest(url):
         else:
             response = http.request('GET', url)
     roundRobin += 1
+    if not roundRobin % 60:
+        newTorIdentity()
     return response.data
 
-async def asyncRequest(url, randomUserAgent):
+async def asyncRequest(url):
     timeout = aiohttp.ClientTimeout(total=60*3)
-    ua = {'user-agent': randomUserAgent}
+    ua = {'user-agent': randomUserAgent(), 'Cookie': ''}
     async with aiohttp.ClientSession(headers=ua) as session:
         try:
             async with await session.get(url, timeout=timeout) as response:
@@ -210,29 +221,30 @@ def productIdsExtractor(soup):
 
 def sellerListExtractor(sellerListLink, sbar):
     divs = []
-    i = 0
     while True:
         _htmlContent = pageRequest(sellerListLink)
         _soup = BeautifulSoup(_htmlContent, 'lxml')
-        _t = _soup.find('title').text
-        if _t == 'Sorry! Something went wrong!':
-            sbar.write(sellerListLink)
-            sbar.write('[x] {}'.format(_t))
-            sbar.write('[!] waiting 30 sec and retrying')
-            if i > 1:
-                sbar.write('[!] already waited a while, move to the next request')
-                break
-            time.sleep(30)
-        _divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
-        for _d in _divs:
-            divs.append(_d)
-        sellerListLink = _soup.find('li', attrs = {'class': 'a-last'})
-        try:
-            a = sellerListLink.find('a')['href']
-        except:
-            break
-        sellerListLink = site + sellerListLink.find('a')['href']
-        i += 1
+        if _soup:
+            try:
+                _t = _soup.find('title').text
+                if _t == 'Sorry! Something went wrong!':
+                    newTorIdentity()
+                    sbar.write(sellerListLink)
+                    sbar.write('[x] {}'.format(_t))
+                    time.sleep(10)
+                else:
+                    _divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
+                    for _d in _divs:
+                        divs.append(_d)
+                    sellerListLink = _soup.find('li', attrs = {'class': 'a-last'})
+                    try:
+                        a = sellerListLink.find('a')['href']
+                    except Exception as e:
+                        break
+                    sellerListLink = site + sellerListLink.find('a')['href']
+            except AttributeError:
+                sbar.write("[x] can't find title, going to wait for a while and retry")
+                time.sleep(10)
     return divs
 
 
@@ -274,7 +286,7 @@ def sellerJustLaunched(soup):
         return 'True'
     return ''
 
-def extractSellerInfo(link, itemID, sbar):
+async def extractSellerInfo(link, itemID, sbar):
     sellerID = sellerIdExtractor(link, sbar)
     if sellerID:
         try:
@@ -300,7 +312,7 @@ def extractSellerInfo(link, itemID, sbar):
             return sellerFull
     return {}
 
-async def fetchSellersFull(itemID, writer, sbar):
+async def fetchSellersFull(itemID, sbar):
     insertProduct(itemID)
     checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
     divs = sellerListExtractor(checkUrl, sbar)
@@ -309,21 +321,13 @@ async def fetchSellersFull(itemID, writer, sbar):
         name = _name.text.strip()
         if name:
             sellerLink = _name.find('a')['href']
-            sellerFull = extractSellerInfo(sellerLink, itemID, sbar)
+            sellerFull = await extractSellerInfo(sellerLink, itemID, sbar)
             if sellerFull:
                 if not sellerFull['feedback'] == '-1':
                     sbar.write("<-> " + name + "\n |-> id: " + sellerFull['id']
                         + "\n |-> just-launched: " + sellerFull['just-launched']
                         + "\n |-> feedback: " + sellerFull['feedback']
                         + "\n --- desc: " + sellerFull['desc'])
-                    writer.writerow({
-                        'id': sellerFull['id'],
-                        'name': str(name),
-                        'link': site + sellerLink,
-                        'just-launched': sellerFull['just-launched'],
-                        'feedback': sellerFull['feedback'],
-                        'desc': sellerFull['desc']
-                        })
                     _t_JL = 0
                     if sellerFull['just-launched']:
                         _t_JL = 1
@@ -338,44 +342,36 @@ async def fetchSellersFull(itemID, writer, sbar):
 
 site = "https://" + baseUrl.split('/')[2]
 
-mode = "w"
 tasks = []
 loop = asyncio.get_event_loop()
 
 fPage = int(pages[0])
 lPage = int(pages[1])
 
-if os.path.exists(filename):
-    mode = "a"
-with open(filename, mode=mode) as csv_file:
-    fieldnames = ['id', 'name', 'link', 'just-launched', 'feedback', 'desc']
-    global writer
-    writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-    if mode == "w":
-        writer.writeheader()
-    _tqdm_desc = "[<] Extracting ids from pages"
-    with tqdm(total=lPage, desc=_tqdm_desc) as pbar:
-        getInsertedSellers()
-        loop = asyncio.get_event_loop()
-        for i in range(lPage):
-            htmlContent = pageRequest(baseUrl)
-            soup = BeautifulSoup(htmlContent, 'lxml')
-            if soup.find('title').text == 'Robot Check':
-                pbar.write('[x] Captcha found, wait a while before retrying or change the IP!')
-            else:
-                nextPage = soup.find('a', attrs = {'class': 'pagnNext'})['href']
-                baseUrl = site + nextPage
-                if i >= fPage:
-                    IDs = productIdsExtractor(soup)
-                    if not len(IDs):
-                        pbar.write("[x] Amazon is blocking your requests, please change IP")
-                        exit()
-                    for key in IDs:
-                        task = asyncio.ensure_future(fetchSellersFull(key, writer, pbar))
-                        tasks.append(task)
-                pbar.update(1)
-        pbar.clear()
-        pbar.set_description("[<] Extracting sellers info")
-        loop.run_until_complete(asyncio.wait(tasks))
-        loop.close()
-        dbConnector.close()
+_tqdm_desc = "[<] Extracting ids from pages"
+with tqdm(total=lPage, desc=_tqdm_desc) as pbar:
+    getInsertedSellers()
+
+    loop = asyncio.get_event_loop()
+    for i in range(lPage):
+        htmlContent = pageRequest(baseUrl)
+        soup = BeautifulSoup(htmlContent, 'lxml')
+        if soup.find('title').text == 'Robot Check':
+            pbar.write('[x] Captcha found, wait a while before retrying or change the IP!')
+        else:
+            nextPage = soup.find('a', attrs = {'class': 'pagnNext'})['href']
+            baseUrl = site + nextPage
+            if i >= fPage:
+                IDs = productIdsExtractor(soup)
+                if not len(IDs):
+                    pbar.write("[x] Amazon is blocking your requests, please change IP")
+                    exit()
+                for key in IDs:
+                    task = asyncio.ensure_future(fetchSellersFull(key, pbar))
+                    tasks.append(task)
+            pbar.update(1)
+    pbar.clear()
+    pbar.set_description("[<] Extracting sellers info")
+    loop.run_until_complete(asyncio.wait(tasks))
+    loop.close()
+    dbConnector.close()
