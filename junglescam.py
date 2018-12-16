@@ -125,6 +125,7 @@ def insertSeller(productID, sellerInfo):
         pass
     try:
         cursor.execute('INSERT INTO sellers VALUES(?,?,?,?)', sellerInfo)
+        dbConnector.commit()
     except sqlite3.IntegrityError:
         pass
 
@@ -151,27 +152,31 @@ def getInsertedSellers():
             cursorBar.update(1)
     cursorBar.close()
 
-def randomUserAgent():
-    _httpPool = urllib3.PoolManager( 10,
+def getRandomUA():
+    _httpPool = urllib3.PoolManager( 1,
         cert_reqs='CERT_REQUIRED',
         ca_certs=certifi.where())
     url = "https://fake-useragent.herokuapp.com/browsers/0.1.8"
     r = _httpPool.request('GET', url).data.decode('utf-8')
     browsers = loads(r)['browsers']
+    return browsers
+
+browsers = getRandomUA()
+
+def randomUserAgent():
     return random.choice(browsers[random.choice(list(browsers))])
-
-http = urllib3.PoolManager( 10,
-    cert_reqs='CERT_REQUIRED',
-    ca_certs=certifi.where(),
-    headers={'user-agent': randomUserAgent()})
-
-proxy = SOCKSProxyManager('socks5://localhost:9050',
-    cert_reqs='CERT_REQUIRED',
-    ca_certs=certifi.where(),
-    headers={'user-agent': randomUserAgent()})
 
 def pageRequest(url):
     global roundRobin
+        proxy = SOCKSProxyManager('socks5://localhost:9050',
+        cert_reqs='CERT_REQUIRED',
+        ca_certs=certifi.where(),
+        headers={'user-agent': randomUserAgent(), 'Cookie': ''})
+    http = urllib3.PoolManager( 1,
+        cert_reqs='CERT_REQUIRED',
+        ca_certs=certifi.where(),
+        headers={'user-agent': randomUserAgent(), 'Cookie': ''})
+    
     if roundRobin % 2:
         response = http.request('GET', url)
     else:
@@ -211,15 +216,20 @@ def sellerListExtractor(sellerListLink, sbar):
         _soup = BeautifulSoup(_htmlContent, 'lxml')
         _t = _soup.find('title').text
         if _t == 'Sorry! Something went wrong!':
+            sbar.write(sellerListLink)
             sbar.write('[x] {}'.format(_t))
-            return divs
+            sbar.write('[!] waiting 30 sec and retrying')
+            if i > 1:
+                sbar.write('[!] already waited a while, move to the next request')
+                break
+            time.sleep(30)
         _divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
         for _d in _divs:
             divs.append(_d)
         sellerListLink = _soup.find('li', attrs = {'class': 'a-last'})
         try:
             a = sellerListLink.find('a')['href']
-        except AttributeError:
+        except:
             break
         sellerListLink = site + sellerListLink.find('a')['href']
         i += 1
