@@ -231,6 +231,7 @@ def sellerListExtractor(sellerListLink, sbar):
                     newTorIdentity()
                     sbar.write(sellerListLink)
                     sbar.write('[x] {}'.format(_t))
+                    sbar.write('[*] waiting 10 sec...')
                     time.sleep(10)
                 else:
                     _divs = _soup.find_all('div', attrs = {'class': 'a-row a-spacing-mini olpOffer'})
@@ -243,7 +244,8 @@ def sellerListExtractor(sellerListLink, sbar):
                         break
                     sellerListLink = site + sellerListLink.find('a')['href']
             except AttributeError:
-                sbar.write("[x] can't find title, going to wait for a while and retry")
+                sbar.write("[x] can't find title, going to wait and retry")
+                sbar.write('[*] waiting 10 sec...')
                 time.sleep(10)
     return divs
 
