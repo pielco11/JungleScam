@@ -178,7 +178,7 @@ def randomUserAgent():
 
 def pageRequest(url):
     global roundRobin
-    proxy = SOCKSProxyManager('socks5://localhost:'+torPort,
+    proxy = SOCKSProxyManager('socks5://localhost:'+str(torPort),
         cert_reqs='CERT_REQUIRED',
         ca_certs=certifi.where(),
         headers={'user-agent': randomUserAgent(), 'Cookie': ''})
