@@ -11,4 +11,25 @@ Tor is required to round-robin requests.
 
 Run `python3 junglescam.py` and follow the instructions.
 
+## Round-Robin Setup
+
+1. Be sure to have Tor installed;
+
+2. Create the hash of your password;
+![tor-hash](https://i.imgur.com/hNZDIg0.png)
+
+3. Copy&Paste at the end of the `torrc` file, the location depends by your system;
+![tor-setup](https://i.imgur.com/g66Oi7J.png)
+
+4. Edit `junglescam.py` accordingly to your setup;
+![junglescam-setup](https://i.imgur.com/LL2hI4L.png)
+
+- `torControlPW` is the password that you hashed;
+- `torPort` is the port where Tor is binding;
+- `torControlPort` is the port that you use to connect to Tor and control it.
+
+If you will use Tor Browser, change `torPort` to **9150** and `torControlPort` to **9151**. Note: in that case the location of the `torrc` file will be different.
+
+5. Let `junglescam.py` run for a while, you will see a few `[+] new Tor identity`
+
 2018 - All rights reserved - Francesco Poldi & Jake Creps
