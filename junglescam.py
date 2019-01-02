@@ -52,9 +52,14 @@ else:
 
 _products_id = {}
 _sellers_id = {}
+rmScores = {
+    '3': 'Fail',
+    '2': 'Warn',
+    '1': 'Pass'
+}
 
 roundRobin = 0
-torPort = 9050 # 9150 if using Tor Browser
+torPort = '9050' # 9150 if using Tor Browser
 torControlPort = 9051 # 9151 if using Tor Browser
 torControlPW = 'password' # append `tor --hash-password "password"` to torrc
 # HashedControlPassword 16:86B89B9EDE48F177605F9BA0732B4BB67B0AC2004F197FBA13A91C95C1
@@ -67,7 +72,8 @@ def initDB(db):
     tableProducts = """
         CREATE TABLE IF NOT EXISTS
             products (
-                id TEXT PRIMARY KEY NOT NULL
+                id TEXT PRIMARY KEY NOT NULL,
+                rm_score TEXT
             );
         """
     cursor.execute(tableProducts)
@@ -111,10 +117,10 @@ def initDB(db):
 
 dbConnector = initDB(dbName)
 
-def insertProduct(productID):
+def insertProduct(productID, rmScore):
     try:
         cursor = dbConnector.cursor()
-        cursor.execute('INSERT INTO products VALUES(?)', (productID,))
+        cursor.execute('INSERT INTO products VALUES(?,?)', (productID, rmScore))
         dbConnector.commit()
     except sqlite3.IntegrityError:
         pass
@@ -132,7 +138,7 @@ def insertSeller(productID, sellerInfo):
     except sqlite3.IntegrityError:
         pass
 
-def insertExtra(sellerID, extras):
+def insertExtra(sellerID, extras, rmScore):
     _contact = ('contact' in extras)*1
     _gmail = ('gmail' in extras)*1
     _yahoo = ('yahoo' in extras)*1
@@ -197,6 +203,16 @@ def pageRequest(url):
     if not roundRobin % 60:
         newTorIdentity()
     return response.data
+
+async def reviewMetaScore(itemID):
+    url = f'https://reviewmeta.com/api/amazon/{itemID}'
+    headers = {'user-agent': randomUserAgent(), 'Cookie': ''}
+    async with aiohttp.ClientSession(headers=headers) as session:
+        try:
+            async with await session.get(url) as response:
+                return await response.read()
+        except aiohttp.client_exceptions.ClientConnectorError:
+            print(Fore.RED + "\n[x] Error while fetching data from Amazon!")
 
 async def asyncRequest(url):
     timeout = aiohttp.ClientTimeout(total=60*3)
@@ -315,8 +331,10 @@ async def extractSellerInfo(link, itemID, sbar):
     return {}
 
 async def fetchSellersFull(itemID, sbar):
-    insertProduct(itemID)
     checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
+    rmScore = await reviewMetaScore(itemID)
+    _rmScore = rmScores[loads(rmScore)['s_overall']]
+    insertProduct(itemID, _rmScore)
     divs = sellerListExtractor(checkUrl, sbar)
     for div in divs:
         _name = div.find('h3', attrs = {'class': 'olpSellerName'})
@@ -329,7 +347,8 @@ async def fetchSellersFull(itemID, sbar):
                     sbar.write("<-> " + name + "\n |-> id: " + sellerFull['id']
                         + "\n |-> just-launched: " + sellerFull['just-launched']
                         + "\n |-> feedback: " + sellerFull['feedback']
-                        + "\n --- desc: " + sellerFull['desc'])
+                        + "\n |-> desc: " + sellerFull['desc']
+                        + "\n --> Review Meta Score: " + _rmScore)
                     _t_JL = 0
                     if sellerFull['just-launched']:
                         _t_JL = 1
@@ -353,7 +372,6 @@ lPage = int(pages[1])
 _tqdm_desc = "[<] Extracting ids from pages"
 with tqdm(total=lPage, desc=_tqdm_desc) as pbar:
     getInsertedSellers()
-
     loop = asyncio.get_event_loop()
     for i in range(lPage):
         htmlContent = pageRequest(baseUrl)
