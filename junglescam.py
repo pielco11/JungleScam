@@ -55,7 +55,8 @@ _sellers_id = {}
 rmScores = {
     '3': 'Fail',
     '2': 'Warn',
-    '1': 'Pass'
+    '1': 'Pass',
+    '0': 'No revs'
 }
 
 roundRobin = 0
@@ -138,7 +139,7 @@ def insertSeller(productID, sellerInfo):
     except sqlite3.IntegrityError:
         pass
 
-def insertExtra(sellerID, extras, rmScore):
+def insertExtra(sellerID, extras):
     _contact = ('contact' in extras)*1
     _gmail = ('gmail' in extras)*1
     _yahoo = ('yahoo' in extras)*1
@@ -204,15 +205,10 @@ def pageRequest(url):
         newTorIdentity()
     return response.data
 
-async def reviewMetaScore(itemID):
+def reviewMetaScore(itemID):
     url = f'https://reviewmeta.com/api/amazon/{itemID}'
-    headers = {'user-agent': randomUserAgent(), 'Cookie': ''}
-    async with aiohttp.ClientSession(headers=headers) as session:
-        try:
-            async with await session.get(url) as response:
-                return await response.read()
-        except aiohttp.client_exceptions.ClientConnectorError:
-            print(Fore.RED + "\n[x] Error while fetching data from Amazon!")
+    response = pageRequest(url)
+    return response
 
 async def asyncRequest(url):
     timeout = aiohttp.ClientTimeout(total=60*3)
@@ -332,8 +328,18 @@ async def extractSellerInfo(link, itemID, sbar):
 
 async def fetchSellersFull(itemID, sbar):
     checkUrl = f"https://www.amazon.com/gp/offer-listing/{itemID}/ref=dp_olp_new_center?ie=UTF8"
-    rmScore = await reviewMetaScore(itemID)
-    _rmScore = rmScores[loads(rmScore)['s_overall']]
+    rmScore = loads(reviewMetaScore(itemID))['s_overall']
+    while not rmScore:
+        sbar.write(Fore.YELLOW + '[x] item not scanned yet.\n' +
+                   'Please open the next link in the browser, scan the product and press enter.')
+        sbar.write(f'https://reviewmeta.com/amazon/{itemID}')
+        sbar.write(Fore.YELLOW + '[!] if here aren\'t any reviews for this product, just type \"0\"')
+        _input = input('\n')
+        if _input:
+            rmScore = '0'
+        else:
+            rmScore = loads(reviewMetaScore(itemID))['s_overall']
+    _rmScore = rmScores[rmScore]
     insertProduct(itemID, _rmScore)
     divs = sellerListExtractor(checkUrl, sbar)
     for div in divs:
