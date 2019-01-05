@@ -56,7 +56,7 @@ rmScores = {
     '3': 'Fail',
     '2': 'Warn',
     '1': 'Pass',
-    '0': 'No revs'
+    '0': 'Zero'
 }
 
 roundRobin = 0
@@ -333,7 +333,7 @@ async def fetchSellersFull(itemID, sbar):
         sbar.write(Fore.YELLOW + '[x] item not scanned yet.\n' +
                    'Please open the next link in the browser, scan the product and press enter.')
         sbar.write(f'https://reviewmeta.com/amazon/{itemID}')
-        sbar.write(Fore.YELLOW + '[!] if here aren\'t any reviews for this product, just type \"0\"')
+        sbar.write(Fore.YELLOW + '[!] if there aren\'t any reviews for this product, just type \"0\"')
         _input = input('\n')
         if _input:
             rmScore = '0'
