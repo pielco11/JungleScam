@@ -334,7 +334,7 @@ async def fetchSellersFull(itemID, sbar):
                    'Please open the next link in the browser, scan the product and press enter.')
         sbar.write(f'https://reviewmeta.com/amazon/{itemID}')
         sbar.write(Fore.YELLOW + '[!] if there aren\'t any reviews for this product, just type \"0\"')
-        _input = input('\n[<]')
+        _input = input('\n[>]')
         if _input:
             rmScore = '0'
         else:
