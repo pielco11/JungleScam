@@ -385,7 +385,7 @@ with tqdm(total=lPage, desc=_tqdm_desc) as pbar:
         if soup.find('title').text == 'Robot Check':
             pbar.write('[x] Captcha found, wait a while before retrying or change the IP!')
         else:
-            nextPage = soup.find('a', attrs = {'class': 'pagnNext'})['href']
+            nextPage = soup.find('a', attrs = {'id': 'pagnNextLink'})['href']
             baseUrl = site + nextPage
             if i >= fPage:
                 IDs = productIdsExtractor(soup)
